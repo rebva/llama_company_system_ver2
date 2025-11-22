@@ -1,7 +1,7 @@
 
 ---
 
-# 📘 README.md（完全版 / GitHub 公開向け）
+# 📘 README
 
 ````markdown
 # 🔐 Multi-User LLM API System  
