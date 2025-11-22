@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+requests
+SQLAlchemy
+python-jose[cryptography]
