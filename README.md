@@ -1,3 +1,8 @@
+
+---
+
+# 📘 README.md（完全版 / GitHub 公開向け）
+
 ````markdown
 # 🔐 Multi-User LLM API System  
 FastAPI + JWT + RBAC + SQLite + Ollama Chat API
@@ -217,7 +222,7 @@ curl -X GET http://localhost:8080/admin/users \
 | `JWT_SECRET`                  | CHANGE_THIS_SECRET_KEY     | JWT署名キー   |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 60                         | Token有効期限 |
 | `DB_URL`                      | sqlite:///./data/chat.db   | DBファイル    |
-| `OLLAMA_HOST`                 | http://ollama_admin:11434 | Ollamaサーバ |
+| `OLLAMA_HOST`                 | http://ollama_eguchi:11434 | Ollamaサーバ |
 
 ---
 
@@ -240,31 +245,3 @@ curl -X GET http://localhost:8080/admin/users \
 * [ ] Admin Dashboard（Web UI）
 * [ ] PostgreSQL への移行
 * [ ] API Key 認証追加
-
----
-
-## 📝 License
-
-MIT License
-
----
-
-## 🧑‍💻 Author
-
-admin
-Security / LLM Infra / FastAPI Developer
-
-```
-
----
-
-# 🔥 次のステップを自動生成できます
-
-- README の英語版  
-- ER 図（DB 設計）  
-- システム構成図（Mermaid）  
-- API ドキュメント（OpenAPI 仕様書）  
-- GitHub Actions（CI/CD）  
-
-どれを追加する？
-```
