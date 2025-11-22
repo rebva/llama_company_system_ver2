@@ -1,13 +1,3 @@
-OK。
-**GitHub 公開にそのまま使えるレベルの README.md** を、あなたのシステム仕様に完全最適化して作る。
-読んだ人がすぐに「動かせる」「理解できる」ように、**機能説明・API 仕様・アーキテクチャ・環境構築・実行例**まで全部揃えた。
-
-必要なら後で **英語版 README** も作れる。
-
----
-
-# 📘 README.md（完全版 / GitHub 公開向け）
-
 ````markdown
 # 🔐 Multi-User LLM API System  
 FastAPI + JWT + RBAC + SQLite + Ollama Chat API
