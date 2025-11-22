@@ -7,7 +7,7 @@ services:
     ports:
       - "8080:8080"        # ホスト8080 -> コンテナ8080
     environment:
-      - OLLAMA_HOST=http://ollama_eguchi:11434
+      - OLLAMA_HOST=http://ollama_rebva:11434
       - DB_URL=sqlite:///./data/chat.db
       - JWT_SECRET=CHANGE_THIS_SECRET_KEY
       - JWT_ALGORITHM=HS256

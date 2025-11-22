@@ -14,7 +14,7 @@ import requests
 # =========================
 
 API_KEY = os.environ.get("API_KEY", "CHANGE_ME")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama_eguchi:11434")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama_rebva:11434")
 DB_URL = os.environ.get("DB_URL", "sqlite:///./data/chat.db")
 
 # SQLite 用のエンジン(engine データベース接続)

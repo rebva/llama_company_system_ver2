@@ -23,7 +23,7 @@ import requests
 # 設定 (config)
 # =========================
 
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama_eguchi:11434")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama_rebva:11434")
 DB_URL = os.environ.get("DB_URL", "sqlite:///./data/chat.db")
 
 SECRET_KEY = os.environ.get("JWT_SECRET", "CHANGE_THIS_SECRET_KEY")
@@ -91,10 +91,10 @@ def on_startup():
     db = SessionLocal()
     try:
         # すでに存在するかチェック
-        existing = get_user_by_username(db, "eguchi")
+        existing = get_user_by_username(db, "admin")
         if existing is None:
             # ★ ここで admin ユーザとして作成
-            create_user(db, "eguchi", "password123", role="admin")
+            create_user(db, "admin", "password123", role="admin")
     finally:
         db.close()
 

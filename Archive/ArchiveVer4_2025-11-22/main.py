@@ -23,7 +23,7 @@ import requests
 # 設定 (config)
 # =========================
 
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama_eguchi:11434")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama_rebva:11434")
 DB_URL = os.environ.get("DB_URL", "sqlite:///./data/chat.db")
 
 SECRET_KEY = os.environ.get("JWT_SECRET", "CHANGE_THIS_SECRET_KEY")
