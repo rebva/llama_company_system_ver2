@@ -1,247 +1,196 @@
+マルチユーザー対応 LLM & RAG API
 
----
+FastAPI + SQLite + LangChain + Chroma + Ollama
 
-# 📘 README
+このリポジトリは FastAPI をベースにした、
+マルチユーザー対応（Multi-user）LLM / RAG（検索拡張生成）API サーバ です。
 
-````markdown
-# 🔐 Multi-User LLM API System  
-FastAPI + JWT + RBAC + SQLite + Ollama Chat API
+目的は、社内利用できる 安全性の高い LLM システムをシンプルに構築することです。
 
-このプロジェクトは **ローカル LLM（Ollama）をマルチユーザー化**し、  
-**JWT 認証・RBAC（ロールベースアクセス制御）・会話履歴管理・検索 API** を備えた  
-**セキュアな LLM API サーバー** の実装です。
+🚀 特徴（Features）
+🔐 1. 認証・認可（Authentication & Authorization）
 
-認証・認可・履歴管理がそろっているため、  
-「社内向け LLM」「チーム内チャット AI」「業務支援ボット」などにそのまま使えます。
+JWT 認証（/login）
 
----
+ユーザー登録（/register）
 
-## 🚀 Features（機能）
+role（user / admin）によるアクセス制御
 
-### 🔑 1. ユーザー認証（JWT）
-- `/register` でユーザー作成  
-- `/login` で JWT アクセストークン発行  
-- FastAPI 依存関係で `get_current_user` により JWT 検証  
-- Token Payload:
-  ```json
-  {
-    "sub": "username",
-    "role": "admin or user",
-    "exp": "expire timestamp"
-  }
-````
+管理者専用エンドポイント：/admin/users
 
-### 🛡 2. RBAC（Role-Based Access Control）
+JWT のペイロードには以下が含まれます：
 
-* 管理者だけアクセスできる API `/admin/users`
-* 通常ユーザーはアクセス不可 → **403 Forbidden**
+sub: ユーザー名
 
-### 💬 3. 会話履歴の永続化（SQLite）
+role: 権限（user / admin）
 
-* SQLite `data/chat.db` に永続保存
-* 会話は `session_id` ごとに区別して保存
-* 再起動しても履歴が残る
+exp: 有効期限
 
-### 🔎 4. 会話検索 API（キーワード検索）
+💬 2. マルチユーザー Chat API（/chat）
 
-* `/history/search?keyword=hello`
-* 自分の会話のみ検索可能（ユーザー隔離）
+Ollama の /api/chat を利用して LLM に問い合わせ
 
-### 📂 5. セッション管理 API
+会話履歴は SQLite に保存
 
-* `/sessions` — すべての会話セッション一覧
-* `/history/by-session?session_id=<id>` — セッション単位で過去ログ閲覧
+session_id によりユーザーごとの複数セッションを保持
 
-### 🤖 6. Ollama Chat 連携
+自分の履歴しか閲覧できない安全設計
 
-* `/chat` で Ollama コンテナへ LLM クエリ
-* 会話履歴をコンテキストとして送信
-* Llama3 などユーザー環境のモデルに対応
+📚 3. RAG（検索拡張生成）API（/rag/chat）
 
----
+LangChain の RetrievalQA を使用した RAG パイプライン
 
----
+VectorDB は Chroma
 
-## 🏗 System Architecture（システム構成）
+Embeddings は HuggingFaceEmbeddings（multilingual SBERT）
 
-```
-+-------------------------------------------+
-|                 Client                    |
-|        (curl / app / frontend)            |
-+------------------------+------------------+
-                         |
-                         v
-+--------------------------------------------------------+
-|                     FastAPI Server                     |
-|                                                        |
-|  - /register  → User create                            |
-|  - /login     → JWT issue                              |
-|  - /chat      → Chat with LLM                          |
-|  - /sessions  → Session list                           |
-|  - /history   → History & search                       |
-|                                                        |
-|  Auth: JWT + RBAC                                      |
-|  DB: SQLite (chat.db)                                  |
-+------------------------+-------------------------------+
-                         |
-                         v
-+--------------------------------------------------------+
-|                       Ollama                           |
-|       (local LLM model e.g., llama3 / mistral)         |
-+--------------------------------------------------------+
-```
+Ollama LLM（例：llama3）
 
----
+返却値には：
 
-## 📦 Directory Structure
+LLM の回答
 
-```
+モデルが参照したソース文書（source + snippet）
+
+📖 4. 履歴検索 API（/history/search）
+
+キーワード検索により、自分のチャット履歴を検索
+
+session_id 指定でセッション単位の抽出も可能
+
+最新順で返却
+
+👑 5. 管理者向け機能（/admin/users）
+
+登録済みユーザーの一覧表示（admin ロールのみアクセス可能）
+
+🧱 技術スタック（Tech Stack）
+分類	技術
+言語	Python 3.11
+Web フレームワーク	FastAPI
+認証	JWT（python-jose）
+データベース	SQLite（SQLAlchemy）
+LLM	Ollama
+Embeddings	HuggingFaceEmeddings
+RAG	LangChain（RetrievalQA）
+VectorDB	Chroma
+コンテナ	Docker / docker-compose
+📁 ディレクトリ構成（例）
 .
-├── Dockerfile
-├── docker-compose.yaml
-├── main.py              # FastAPI server
-├── requirements.txt
-└── data/
-    └── chat.db          # SQLite database (auto-generated)
-```
+├── main.py                      # FastAPI エントリーポイント
+├── requirements.txt             # 依存パッケージ
+├── docker-compose.yaml          # Docker構成
+├── .env                         # 環境変数
+├── data/
+│   └── chat.db                  # SQLite DB
+├── chroma_db/                   # ChromaベクトルDB
+└── src/
+    ├── config.py                # 定数（モデル名 / DBパス）
+    ├── rag_chain.py             # RAGチェーン定義
+    ├── prepare_data.py          # Chroma作成スクリプト
+    ├── loaders.py               # 文書読み込み
+    ├── embeddings.py            # Embeddingモデル定義
+    └── run_query.py             # RAG 単体テスト
 
----
+🔧 環境変数（.env）
+HUGGINGFACEHUB_API_TOKEN=your_token_here
 
-## 🔧 Installation
+# Ollama ホスト（docker-compose に合わせる）
+OLLAMA_HOST=http://ollama_rebva:11434
 
-### 1. Clone repository
+# LLM モデル名
+OLLAMA_MODEL=llama3
 
-```bash
-git clone https://github.com/yourname/llmapi.git
-cd llmapi
-```
+# JWT 設定
+JWT_SECRET=CHANGE_THIS_SECRET_KEY
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 
-### 2. Start with docker compose
+# SQLite のパス（デフォルト）
+DB_URL=sqlite:///./data/chat.db
 
-```bash
-docker compose build
-docker compose up -d
-```
+⚙️ セットアップ（Setup）
+1. リポジトリのクローン
+git clone https://github.com/yourname/your-repo.git
+cd your-repo
 
-### 3. Check containers
+2. Python 仮想環境（任意）
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-```bash
-docker compose ps
-```
+3. .env を作成
+cp .env.example .env
 
-例：
 
-```
-llm_api       running 0.0.0.0:8080->8080/tcp
-ollama        running 11434/tcp
-```
+自分の環境に合わせて編集してください。
 
----
+4. Ollama の起動とモデル準備
+ollama pull llama3
+ollama serve
 
-## 🧪 API Usage Examples
 
-ここでは **curl** を使った動作確認例をまとめます。
+接続確認：
 
----
+curl http://localhost:11434/api/tags
 
-### 🔐 Register User
+5. ドキュメントの埋め込み（ChromaDB 構築）
+python -m src.prepare_data
 
-```bash
-curl -X POST http://localhost:8080/register \
+6. FastAPI の起動
+A. 手動（ローカル）
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+B. Docker Compose
+docker compose up --build
+
+
+Swagger UI：
+
+http://localhost:8000/docs
+
+🔗 API 一覧と curl サンプル
+■ 1. ユーザー登録 /register
+curl -X POST "http://localhost:8000/register" \
   -H "Content-Type: application/json" \
-  -d '{"username": "user1", "password": "pass1"}'
-```
+  -d '{"username":"user1","password":"pass1"}'
 
----
-
-### 🔑 Login (Get JWT Token)
-
-```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/login \
+■ 2. ログイン /login
+TOKEN=$(
+  curl -s -X POST "http://localhost:8000/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"pass1"}' | jq -r '.access_token')
-```
+  -d '{"username":"user1","password":"pass1"}' | jq -r '.access_token'
+)
+echo $TOKEN
 
----
+■ 3. 管理者ユーザー一覧 /admin/users
+curl -X GET "http://localhost:8000/admin/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 
-### 🤖 Chat with LLM
-
-```bash
-curl -X POST http://localhost:8080/chat \
+■ 4. チャット /chat
+curl -X POST "http://localhost:8000/chat" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"message":"Hello LLM","session_id":"test1"}'
-```
+  -d '{"message":"Hello","session_id":"session-1"}'
 
----
+■ 5. RAG チャット /rag/chat
+curl -X POST "http://localhost:8000/rag/chat" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"このRAGについて説明して","session_id":"rag1"}'
 
-### 📂 List Sessions
+■ 6. 履歴検索 /history/search
+curl -G "http://localhost:8000/history/search" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "q=Hello" \
+  --data-urlencode "session_id=session-1"
 
-```bash
-curl -X GET http://localhost:8080/sessions \
-  -H "Authorization: Bearer $TOKEN"
-```
+🔒 セキュリティ注意点（Security Notes）
 
----
+パスワードは SHA-256 + SECRET を使用（本番は bcrypt/argon2 推奨）
 
-### 📝 Get History by Session
+JWT Secret は強力なランダム文字列を使用
 
-```bash
-curl -X GET \
-  "http://localhost:8080/history/by-session?session_id=test1" \
-  -H "Authorization: Bearer $TOKEN"
-```
+EXPOSE している場合は HTTPS と Reverse Proxy（Nginx）を推奨
 
----
-
-### 🔎 Search Keyword in History
-
-```bash
-curl -X GET \
-  "http://localhost:8080/history/search?keyword=Hello" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
----
-
-### 👑 Admin Only API
-
-```bash
-curl -X GET http://localhost:8080/admin/users \
-  -H "Authorization: Bearer ADMIN_TOKEN"
-```
-
----
-
-## ⚙ Settings (Environment Variables)
-
-環境変数で柔軟に変更できます：
-
-| 変数名                           | デフォルト値                     | 説明        |
-| ----------------------------- | -------------------------- | --------- |
-| `JWT_SECRET`                  | CHANGE_THIS_SECRET_KEY     | JWT署名キー   |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | 60                         | Token有効期限 |
-| `DB_URL`                      | sqlite:///./data/chat.db   | DBファイル    |
-| `OLLAMA_HOST`                 | http://ollama_eguchi:11434 | Ollamaサーバ |
-
----
-
-## 🔐 Security Notes
-
-* パスワードは SHA-256（+ SECRET_KEY）でハッシュ
-  → 運用では bcrypt / argon2 に変更推奨
-* API はすべて JWT 必須
-* RBAC により admin だけ管理操作可能
-* LLM にはフィルタ済みの履歴のみ渡す
-* SQLite → PostgreSQL への置き換え可能
-
----
-
-## 📝 Roadmap（拡張案）
-
-* [ ] Audit Log（監査ログ）
-* [ ] Rate Limit（1分あたりのリクエスト制限）
-* [ ] RAG（PDF/文書の取り込み）
-* [ ] Admin Dashboard（Web UI）
-* [ ] PostgreSQL への移行
-* [ ] API Key 認証追加
+RAG データは「信頼できる文書」のみに限定
