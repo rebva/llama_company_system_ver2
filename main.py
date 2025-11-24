@@ -4,9 +4,10 @@ from typing import Optional
 
 from fastapi import FastAPI, Depends, Header, HTTPException, status, Query
 from pydantic import BaseModel
-# 追加
+# fastapiのJWS認証モジュールとtoken取得モジュール
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from src.rag_chain import get_qa_chain  # さっきの RAG プロジェクトのコード
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
@@ -81,7 +82,8 @@ app = FastAPI()
 # =========================
 # FastAPI 本体
 # =========================
-
+#rag_qa 変数をグローバルに持つ起動時に一度だけ初期化
+rag_qa: Optional[object] = None
 
 
 #起動時のdefoult user = admin
@@ -90,13 +92,17 @@ def on_startup():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        # すでに存在するかチェック
         existing = get_user_by_username(db, "admin")
         if existing is None:
-            # ★ ここで admin ユーザとして作成
             create_user(db, "admin", "password123", role="admin")
     finally:
         db.close()
+
+    # ★ ここで RAG チェーンを初期化
+    from src.rag_chain import get_qa_chain
+    global rag_qa
+    rag_qa = get_qa_chain()
+
 
 
 
@@ -215,6 +221,25 @@ class HistoryItem(BaseModel):
 
     class Config:
         orm_mode = True
+
+# =========================
+# RAG チャットAPI用モデル
+# =========================
+
+class RagChatRequest(BaseModel):
+    question: str
+    session_id: Optional[str] = None
+
+
+class RagSource(BaseModel):
+    source: str
+    snippet: str  # ドキュメントの一部を表示する短いテキスト
+
+
+class RagChatResponse(BaseModel):
+    answer: str
+    session_id: str
+    sources: list[RagSource]
 
 
 # =========================
@@ -410,6 +435,55 @@ def chat(
     # 5) レスポンス
     return ChatResponse(reply=answer, session_id=session_id)
 
+# =========================
+# /rag/chat エンドポイント (JWT必須)
+# =========================
+@app.post("/rag/chat", response_model=RagChatResponse)
+def rag_chat(
+    req: RagChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if rag_qa is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG chain is not ready.",
+        )
+
+    user_id = current_user.username
+    role = current_user.role
+    session_id = req.session_id or "1"
+
+    # 1) SimpleRAG に投げる
+    result = rag_qa.invoke({
+        "query": req.question,
+        "user_id": user_id,
+        "role": role,
+    })
+
+    answer: str = result.get("result", "")
+    source_docs = result.get("source_documents", []) or []
+
+    # 2) 会話履歴を保存（必要であれば）
+    history_messages = [
+        {"role": "user", "content": req.question},
+        {"role": "assistant", "content": answer},
+    ]
+    save_history(db, user_id, session_id, history_messages)
+
+    # 3) run_query.py と同じロジックで sources を作る
+    sources: list[RagSource] = []
+    for doc in source_docs:
+        meta = getattr(doc, "metadata", {}) or {}
+        source_name = meta.get("source", "unknown")
+        snippet = doc.page_content.replace("\n", " ")[:50]
+        sources.append(RagSource(source=source_name, snippet=snippet))
+
+    return RagChatResponse(
+        answer=answer,
+        session_id=session_id,
+        sources=sources,
+    )
 # ref to chat history from sqlite.db
 # =========================
 # /history/search エンドポイント

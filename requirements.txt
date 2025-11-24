@@ -3,3 +3,16 @@ uvicorn[standard]
 requests
 SQLAlchemy
 python-jose[cryptography]
+# RAG / LangChain / Chroma まわり
+langchain
+langchain-community
+langchain-chroma
+langchain-huggingface
+langchain-text-splitters
+chromadb
+sentence-transformers
+pymupdf
+huggingface-hub
+fugashi
+ipadic
+unidic-lite
