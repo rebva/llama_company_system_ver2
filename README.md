@@ -1,5 +1,3 @@
----
-
 # マルチユーザー対応 LLM & RAG API
 
 **FastAPI + SQLite + LangChain + Chroma + Ollama**
