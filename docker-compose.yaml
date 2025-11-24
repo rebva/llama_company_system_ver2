@@ -1,24 +1,19 @@
+version: "3.9"
+
 services:
   api:
-    container_name: llm_api
-    image: llmapi-api
     build: .
+    container_name: llm_api
     ports:
-      - "8080:8080"   # 内部テスト用にそのまま残すならそのまま
-    networks:
-      - garak-net
-    # ...
-
-  nginx:
-    image: nginx:alpine
-    container_name: llm_api_nginx
-    ports:
-      - "8443:443"
+      - "8080:8080"        # ホスト8080 -> コンテナ8080
+    environment:
+      - OLLAMA_HOST=http://ollama_rebva:11434
+      - DB_URL=sqlite:///./data/chat.db
+      - JWT_SECRET=CHANGE_THIS_SECRET_KEY
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./certs:/etc/nginx/certs:ro
-    depends_on:
-      - api
+      - ./data:/app/data
     networks:
       - garak-net
 
