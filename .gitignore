@@ -3,8 +3,6 @@ __pycache__/
 .env
 .env.local
 data/
-logs/
-Archive/
 chroma_db/
 api_login.sh
 rag_data/

@@ -4,7 +4,7 @@ requests
 SQLAlchemy
 python-jose[cryptography]
 # RAG / LangChain / Chroma まわり
-langchain
+langchain==0.3.0
 langchain-community
 langchain-chroma
 langchain-huggingface

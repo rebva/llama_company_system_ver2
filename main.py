@@ -1,13 +1,10 @@
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, List
 
-from fastapi import FastAPI, Depends, Header, HTTPException, status, Query
-from pydantic import BaseModel
-# fastapiのJWS認証モジュールとtoken取得モジュール
+from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-from src.rag_chain import get_qa_chain  # さっきの RAG プロジェクトのコード
+from pydantic import BaseModel
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
@@ -16,9 +13,10 @@ from jose import JWTError, jwt
 
 import hashlib
 import hmac
-
 import requests
 
+# ★ RAG チェーンを読み込み（src 配下は既存のまま利用）
+from src.rag_chain import get_qa_chain  # RetrievalQA チェーン構築関数
 
 # =========================
 # 設定 (config)
@@ -36,16 +34,14 @@ security = HTTPBearer()
 # SQLite engine
 engine = create_engine(
     DB_URL,
-    connect_args={"check_same_thread": False},  # SQLite のおまじない
+    connect_args={"check_same_thread": False},  # SQLite 用おまじない
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-
-
 # =========================
-# DBモデル
+# DB モデル
 # =========================
 
 class User(Base):
@@ -54,60 +50,68 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    role = Column(String, default="user")  # role管理
-
+    role = Column(String, default="user")  # "admin" / "user" など
 
 
 class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, index=True)       # ここでは username を入れる
+    user_id = Column(String, index=True)       # username を保存
     session_id = Column(String, index=True)
     role = Column(String)                      # "user" or "assistant"
     content = Column(Text)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
-#admin用API
+
+# 管理画面用 User 情報
 class UserInfo(BaseModel):
     id: int
     username: str
     role: str
 
     class Config:
-        from_attributes  = True
-
-app = FastAPI()
+        from_attributes = True  # ORM モデルから変換
 
 # =========================
 # FastAPI 本体
 # =========================
-#rag_qa 変数をグローバルに持つ起動時に一度だけ初期化
-rag_qa: Optional[object] = None
+
+app = FastAPI()
+
+# RAG チェーンをグローバルに一度だけ初期化
+rag_qa = None  # LangChain RetrievalQA インスタンスを後からセット
 
 
-#起動時のdefoult user = admin
+# =========================
+# アプリ起動時の初期化
+# =========================
+
 @app.on_event("startup")
 def on_startup():
+    """
+    - DB のテーブル作成
+    - デフォルト admin ユーザ作成
+    - RAG チェーン (RetrievalQA) の初期化
+    """
     Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
     try:
+        # admin ユーザがいなければ作る
         existing = get_user_by_username(db, "admin")
         if existing is None:
             create_user(db, "admin", "password123", role="admin")
     finally:
         db.close()
 
-    # ★ ここで RAG チェーンを初期化
-    from src.rag_chain import get_qa_chain
+    # ★ 起動時に一度だけ RAG チェーンを構築
     global rag_qa
     rag_qa = get_qa_chain()
 
 
-
-
 # =========================
-# DB セッション取得
+# DB セッション
 # =========================
 
 def get_db():
@@ -123,8 +127,10 @@ def get_db():
 # =========================
 
 def get_password_hash(password: str) -> str:
-    # 実運用なら bcrypt / argon2 を使うべき。
-    # ここではデモ用に「SECRET_KEY をソルト代わり」に SHA-256 を使う。
+    """
+    実運用なら bcrypt/argon2 を推奨。
+    ここではデモ用に SECRET_KEY をソルト代わりに SHA-256。
+    """
     data = (SECRET_KEY + password).encode("utf-8")
     return hashlib.sha256(data).hexdigest()
 
@@ -132,10 +138,8 @@ def get_password_hash(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     data = (SECRET_KEY + plain_password).encode("utf-8")
     calc = hashlib.sha256(data).hexdigest()
-    # タイミング攻撃対策用(compare_digest)
+    # timing attack 対策として compare_digest を使用
     return hmac.compare_digest(calc, hashed_password)
-
-
 
 
 def get_user_by_username(db: Session, username: str) -> Optional[User]:
@@ -149,7 +153,6 @@ def create_user(db: Session, username: str, password: str, role: str = "user") -
     db.commit()
     db.refresh(user)
     return user
-
 
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
@@ -185,8 +188,9 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
-    
-#　ユーザ作成モジュール用pydanicモデル
+
+
+# ユーザ作成用 Pydantic モデル
 class RegisterRequest(BaseModel):
     username: str
     password: str
@@ -196,10 +200,8 @@ class RegisterResponse(BaseModel):
     username: str
 
 
-
-
 # =========================
-# チャットAPI用モデル
+# チャット API 用モデル
 # =========================
 
 class ChatRequest(BaseModel):
@@ -211,7 +213,8 @@ class ChatResponse(BaseModel):
     reply: str
     session_id: str
 
-#chat history ref to db
+
+# 履歴参照用
 class HistoryItem(BaseModel):
     id: int
     session_id: str
@@ -222,8 +225,9 @@ class HistoryItem(BaseModel):
     class Config:
         orm_mode = True
 
+
 # =========================
-# RAG チャットAPI用モデル
+# RAG チャット API 用モデル
 # =========================
 
 class RagChatRequest(BaseModel):
@@ -233,13 +237,13 @@ class RagChatRequest(BaseModel):
 
 class RagSource(BaseModel):
     source: str
-    snippet: str  # ドキュメントの一部を表示する短いテキスト
+    snippet: str
 
 
 class RagChatResponse(BaseModel):
     answer: str
     session_id: str
-    sources: list[RagSource]
+    sources: List[RagSource]
 
 
 # =========================
@@ -251,10 +255,9 @@ async def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     """
-    Authorization: Bearer <token> を受け取る。
-    /docs の「Authorize」ボタンからトークンだけ入れればOKになる。
+    Authorization: Bearer <token> を受け取ってユーザを特定。
     """
-    token = credentials.credentials  # "Bearer " の後の部分だけ
+    token = credentials.credentials
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -263,7 +266,7 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str | None = payload.get("sub")
+        username: Optional[str] = payload.get("sub")
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
@@ -276,30 +279,31 @@ async def get_current_user(
     return user
 
 
-
-#role 管理
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     """
     role='admin' のユーザだけを許可する dependency。
-    それ以外は 403 Forbidden を返す。
+    それ以外は 403 Forbidden。
     """
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions",  # 権限が足りない
+            detail="Not enough permissions",
         )
     return current_user
 
-#adminエンドポイントapp.getリクエストはdefの下
 
-#dbの下にadmin
-@app.get("/admin/users", response_model=list[UserInfo])
+# =========================
+# 管理系エンドポイント
+# =========================
+
+@app.get("/admin/users", response_model=List[UserInfo])
 def list_users(
     db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin),  # ★ admin だけ
+    admin: User = Depends(get_current_admin),  # admin のみ
 ):
     users = db.query(User).order_by(User.id).all()
     return users
+
 
 # =========================
 # /login エンドポイント
@@ -313,11 +317,12 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
         "sub": user.username,
-        "role": user.role,  # ★ role も入れる
+        "role": user.role,
     }
     access_token = create_access_token(
         data=payload,
@@ -333,10 +338,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
 @app.post("/register", response_model=RegisterResponse)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
     """
-    新しいユーザを登録するAPI。
-    - すでに同じusernameがあれば 400 を返す。
+    新しいユーザを登録する API。
     """
-    # すでに存在するかチェック
     existing = get_user_by_username(db, req.username)
     if existing is not None:
         raise HTTPException(
@@ -344,9 +347,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
             detail="Username already registered",
         )
 
-    # ユーザ作成（パスワードは get_password_hash() でハッシュ化される）
     create_user(db, req.username, req.password)
-
     return RegisterResponse(username=req.username)
 
 
@@ -368,7 +369,7 @@ def load_history(db: Session, user_id: str, session_id: str) -> list[dict]:
 
 
 def save_history(db: Session, user_id: str, session_id: str, messages: list[dict]) -> None:
-    # シンプルに「そのセッションの履歴を一度削除してから全部入れ直す」
+    # シンプルにそのセッションの履歴を削除してから再挿入
     db.query(Conversation).filter(
         Conversation.user_id == user_id,
         Conversation.session_id == session_id,
@@ -391,7 +392,7 @@ def save_history(db: Session, user_id: str, session_id: str, messages: list[dict
 
 
 # =========================
-# /chat エンドポイント (JWT必須)
+# /chat エンドポイント (Ollama 直叩き, JWT 必須)
 # =========================
 
 @app.post("/chat", response_model=ChatResponse)
@@ -400,21 +401,19 @@ def chat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user_id = current_user.username  # 会話テーブルには username を保存する
+    user_id = current_user.username
     session_id = req.session_id or "default"
 
     # 1) 履歴取得
     history = load_history(db, user_id, session_id)
 
-    # 2) Ollama に投げる messages を作る
-    messages = history + [
-        {"role": "user", "content": req.message}
-    ]
+    # 2) Ollama に送る messages を作成
+    messages = history + [{"role": "user", "content": req.message}]
 
     payload = {
         "model": "llama3",
         "messages": messages,
-        "stream": False,  # 1つのJSONだけ返すモード
+        "stream": False,  # 1つの JSON を返す
     }
 
     # 3) Ollama API 呼び出し
@@ -432,47 +431,48 @@ def chat(
     new_history = messages + [{"role": "assistant", "content": answer}]
     save_history(db, user_id, session_id, new_history)
 
-    # 5) レスポンス
     return ChatResponse(reply=answer, session_id=session_id)
 
+
 # =========================
-# /rag/chat エンドポイント (JWT必須)
+# /rag/chat エンドポイント (RAG + LangChain, JWT 必須)
 # =========================
+
 @app.post("/rag/chat", response_model=RagChatResponse)
 def rag_chat(
     req: RagChatRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    LangChain RetrievalQA (RAG) を使った QA エンドポイント。
+    """
     if rag_qa is None:
+        # 起動時に初期化できていない場合
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="RAG chain is not ready.",
         )
 
     user_id = current_user.username
-    role = current_user.role
     session_id = req.session_id or "1"
 
-    # 1) SimpleRAG に投げる
-    result = rag_qa.invoke({
-        "query": req.question,
-        "user_id": user_id,
-        "role": role,
-    })
+    # ★ LangChain 0.30 の RetrievalQA は "query" キーのみ受け付ける
+    #   余計なキー (user_id, role など) を渡すとエラーになるため注意
+    result = rag_qa.invoke({"query": req.question})
 
-    answer: str = result.get("result", "")
+    answer: str = result.get("result", "") or ""
     source_docs = result.get("source_documents", []) or []
 
-    # 2) 会話履歴を保存（必要であれば）
+    # 会話履歴を保存（必要最低限）
     history_messages = [
         {"role": "user", "content": req.question},
         {"role": "assistant", "content": answer},
     ]
     save_history(db, user_id, session_id, history_messages)
 
-    # 3) run_query.py と同じロジックで sources を作る
-    sources: list[RagSource] = []
+    # ソース情報を整形
+    sources: List[RagSource] = []
     for doc in source_docs:
         meta = getattr(doc, "metadata", {}) or {}
         source_name = meta.get("source", "unknown")
@@ -484,23 +484,22 @@ def rag_chat(
         session_id=session_id,
         sources=sources,
     )
-# ref to chat history from sqlite.db
+
+
 # =========================
 # /history/search エンドポイント
 # =========================
 
-@app.get("/history/search", response_model=list[HistoryItem])
+@app.get("/history/search", response_model=List[HistoryItem])
 def search_history(
-    q: str = Query(..., min_length=1, description="keyword to search"),  # 検索キーワード
-    session_id: Optional[str] = Query(None, description="filter by session_id"),  # 省略可
+    q: str = Query(..., min_length=1, description="keyword to search"),
+    session_id: Optional[str] = Query(None, description="filter by session_id"),
     limit: int = Query(50, ge=1, le=500, description="max results"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    ログインユーザ(current_user) の会話履歴をキーワード検索する。
-    - デフォルト: 全セッションから検索
-    - session_id を指定すると、そのセッションだけから検索
+    ログインユーザ(current_user) の会話履歴をキーワード検索。
     """
     query = db.query(Conversation).filter(
         Conversation.user_id == current_user.username,
@@ -510,7 +509,6 @@ def search_history(
     if session_id:
         query = query.filter(Conversation.session_id == session_id)
 
-    # 新しい順で limit 件
     rows = (
         query
         .order_by(Conversation.created_at.desc(), Conversation.id.desc())

@@ -7,10 +7,7 @@ import os  # ファイルやディレクトリ操作用
 from typing import List  # 型ヒント用
 import fitz  # PyMuPDF: PDF操作ライブラリ
 import pandas as pd  # データ解析ライブラリ
-
-# ★ LangChain 1.x では Document は langchain_core 側に移動
-from langchain_core.documents import Document  # LangChain のドキュメントオブジェクトクラス
-
+from langchain.schema import Document  # LangChain のドキュメントオブジェクトクラス
 from src.config import DATA_FOLDER  # ドキュメント格納フォルダパス設定
 
 def load_pdfs() -> List[Document]:

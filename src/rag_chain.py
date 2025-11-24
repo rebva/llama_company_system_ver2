@@ -1,110 +1,45 @@
-# src/rag_chain.py
-
-import os
-from typing import Dict, Any, List
-
+from langchain.chains import RetrievalQA  # RetrievalQAチェーンを使った質問応答機能
+from langchain_community.llms import Ollama   # OllamaローカルLLMラッパー
+from langchain_huggingface import HuggingFaceEmbeddings  # Hugging Face埋め込みモデルラッパー
+# vectordbをインポートする際のChromaモジュール
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.llms import Ollama
-from langchain_core.documents import Document
+from src.config import OLLAMA_MODEL, CHROMA_DB_PATH  # モデル名とChromaDBパス設定を取得
 
-from src.config import CHROMA_DB_PATH, OLLAMA_MODEL
-
-# ここで Ollama の URL を一元管理する
-# OLLAMA_HOST 環境変数 (environment variable(環境変数)) があればそれを使う
-# なければ "http://localhost:11434" を使う
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-
-
-class SimpleRAG:
-    """
-    とてもシンプルな RAG クラス。
-    retriever (Chroma) と llm (Ollama) を使って
-
-        invoke({"query": "...", "user_id": "...", "role": "..."})
-
-    の形で呼び出すと、
-
-        {
-            "result": "回答テキスト",
-            "source_documents": [Document, ...]
-        }
-
-    を返す。
-    """
-
-    def __init__(self, llm, retriever):
-        self.llm = llm
-        self.retriever = retriever
-
-    def invoke(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        # 1) クエリを取り出す
-        query: str = inputs.get("query", "")
-
-        # 2) 関連ドキュメントを取得
-        # langchain 1.x の retriever は .invoke(query) でOK
-        docs: List[Document] = self.retriever.invoke(query)
-
-        # 3) ドキュメントを1つのテキストに結合
-        context_text = "\n\n".join(d.page_content for d in docs)
-
-        # 4) LLM へのプロンプトを作成
-        prompt = f"""あなたはRAGシステムのアシスタントです。
-以下のドキュメントに基づいて、ユーザーの質問に日本語で回答してください。
-もしドキュメントに答えがない場合は、「手元の資料には答えがありません」と正直に伝えてください。
-
-# 質問
-{query}
-
-# 参照ドキュメント
-{context_text}
-"""
-
-        # 5) Ollama 経由で LLM を呼び出す
-        answer: str = self.llm.invoke(prompt)
-
-        # 6) RetrievalQA と似た形式で返す
-        return {
-            "result": answer,
-            "source_documents": docs,
-        }
-
-
-def get_qa_chain() -> SimpleRAG:
-    """
-    - 埋め込みモデル
-    - Chroma ベクトルストア
-    - retriever
-    - Ollama LLM
-
-    を初期化して SimpleRAG を返す。
-    """
-
-    # 1) 埋め込みモデル (embedding(意味ベクトル化))
+from dotenv import load_dotenv
+import os  # os を利用して環境変数読み込み
+load_dotenv()
+OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:8080')
+def get_qa_chain() -> RetrievalQA:
+    # 1) 埋め込みモデルを初期化: ドキュメント検索時に使用する
     emb_model = HuggingFaceEmbeddings(
         model_name="sonoisa/sentence-bert-base-ja-mean-tokens-v2"
     )
 
-    # 2) 永続化された Chroma DB をロード
+    # 2) 永続化されたChromaDBをロード: 既存のベクトルデータを再利用
     vectordb = Chroma(
-        persist_directory=CHROMA_DB_PATH,
-        embedding_function=emb_model,
+        persist_directory=CHROMA_DB_PATH,  # DBファイルの格納先
+        embedding_function=emb_model          # 埋め込み関数として設定
     )
 
-    retriever = vectordb.as_retriever(
-        search_kwargs={"k": 7}
-    )
-
-    # 3) Ollama LLM
+    # 3) OllamaローカルLLMを初期化: 指定モデルを読み込む
     llm = Ollama(
         model=OLLAMA_MODEL,
         base_url=OLLAMA_HOST,
+        )
+
+    # 4) RetrievalQAチェーンを構築
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,                         # 使用するLLM
+        chain_type="stuff",            # チェーンの組み立て方式
+        retriever=vectordb.as_retriever(
+            search_kwargs={"k": 7}    # 上位7チャンクを検索
+        ),
+        return_source_documents=True    # ソースドキュメントを結果に含める
     )
 
-    # 4) SimpleRAG を返す
-    return SimpleRAG(llm=llm, retriever=retriever)
-
+    return qa_chain  # 質問応答チェーンを返却
 
 if __name__ == "__main__":
+    # スクリプト単体実行時: QAチェーンを初期化して完了メッセージを表示
     qa = get_qa_chain()
-    print("SimpleRAG chain is ready.")
+    print("RAG chain is ready.")
