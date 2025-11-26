@@ -11,7 +11,6 @@ services:
       - DB_URL=sqlite:///./data/chat.db
       - JWT_SECRET=CHANGE_THIS_SECRET_KEY
       - JWT_ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_MINUTES=60
     volumes:
       - ./data:/app/data
       - ./chroma_db:/app/chroma_db

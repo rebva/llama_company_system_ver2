@@ -16,3 +16,6 @@ huggingface-hub
 fugashi
 ipadic
 unidic-lite
+janome
+pandas
+transformers[ja]
