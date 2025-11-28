@@ -9,8 +9,8 @@ import os
 load_dotenv()
 
 # ===== RAG 用設定（既存） =====
-# LLMモデル名（環境変数 OLLAMA_MODEL 優先、なければ簡易デフォルト）
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+# LLMモデル名（環境変数 OLLAMA_MODEL 優先、なければデフォルトで Qwen）
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "Qwen/Qwen2-0.5B-Instruct")
 # Windows環境でOllamaのnamed pipeソケットパス
 OLLAMA_SOCKET = r"\\.\pipe\ollama.sock"
 # ドキュメント格納フォルダパス
@@ -22,8 +22,9 @@ HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = HUGGINGFACEHUB_API_TOKEN or ""
 
 # ===== API 共通設定（新規追加） =====
-# LLM バックエンド（Ollama/vLLM）エンドポイント
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama_rebva:11434")
+# LLM バックエンド（vLLM/Ollama など）エンドポイント
+# OpenAI 互換のベース URL（デフォルトで /v1 を含める）
+VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://vllm:8010/v1")
 # データベース URL（デフォルトは SQLite）
 DB_URL = os.getenv("DB_URL", "sqlite:///./data/chat.db")
 # JWT 設定

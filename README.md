@@ -1,275 +1,164 @@
-# マルチユーザー対応 LLM & RAG API
+# LLM API (マルチユーザー対応) をやさしく説明する README
 
-**FastAPI + SQLite + LangChain + Chroma + Ollama**
-
-このリポジトリは **FastAPI** をベースにした、
-**マルチユーザー対応（Multi-user）LLM / RAG（検索拡張生成）API サーバ** です。
-
-目的は、社内利用できる **安全性の高い LLM システム**をシンプルに構築することです。
+FastAPI で動く「社内向け LLM / RAG API サーバ」です。ユーザー認証・履歴保存・RAG（検索拡張生成）がそろっていて、Docker でもローカル Python でもすぐ動かせます。初心者が全体像をつかみやすいように、仕組みと使い方を順番にまとめます。
 
 ---
 
-# 🚀 特徴（Features）
-
-## 🔐 1. 認証・認可（Authentication & Authorization）
-
-* **JWT 認証**（/login）
-* **ユーザー登録**（/register）
-* **role（user / admin）によるアクセス制御**
-* 管理者専用エンドポイント：`/admin/users`
-
-JWT のペイロードには以下が含まれます：
-
-* `sub`: ユーザー名
-* `role`: 権限（user / admin）
-* `exp`: 有効期限
+## 1. これが何をしてくれるか
+- マルチユーザー：JWT でログインし、ユーザーごとに履歴を分ける
+- Chat API：LLM に質問。会話は SQLite に保存され、後でキーワード検索できる
+- RAG API：自分のドキュメントを Chroma に埋め込んで検索し、参照元を返す
+- 管理機能：管理者だけがユーザー一覧を確認できる
+- コンテナ対応：`docker compose up` で API を起動（外部 vLLM/Ollama に接続）
 
 ---
 
-## 💬 2. マルチユーザー Chat API（/chat）
-
-* Ollama の `/api/chat` を利用して LLM に問い合わせ
-* 会話履歴は SQLite に保存
-* `session_id` によりユーザーごとの複数セッションを保持
-* **自分の履歴しか閲覧できない**安全設計
-
----
-
-## 📚 3. RAG（検索拡張生成）API（/rag/chat）
-
-* LangChain の `RetrievalQA` を使用した RAG パイプライン
-* VectorDB は **Chroma**
-* Embeddings は **HuggingFaceEmbeddings**（multilingual SBERT）
-* Ollama LLM（例：llama3）
-* 返却値には：
-
-  * LLM の回答
-  * モデルが参照したソース文書（source + snippet）
+## 2. ざっくりアーキテクチャ
+- FastAPI (`main.py`) がエントリーポイント。起動時に DB 初期化とデフォルト admin ユーザー作成。
+- 認証：`src/auth.py` で JWT 発行/検証。`/login` で発行、`/register` でユーザー追加。
+- データベース：`src/database.py` で SQLite を利用。会話は `conversations` テーブルに保存。
+- LLM：`src/utils/llm_backend.py` が OpenAI 互換の vLLM/Ollama エンドポイントへ投げる。
+- RAG：`src/rag_chain.py` で LangChain RetrievalQA を構築。Chroma (ベクトル検索) + BM25 (全文検索) のハイブリッド。
+- ルーター：`src/routers/` にエンドポイントを分離（auth / chat / rag / admin）。
 
 ---
 
-## 📖 4. 履歴検索 API（/history/search）
-
-* キーワード検索により、自分のチャット履歴を検索
-* `session_id` 指定でセッション単位の抽出も可能
-* 最新順で返却
-
----
-
-## 👑 5. 管理者向け機能（/admin/users）
-
-* 登録済みユーザーの一覧表示（admin ロールのみアクセス可能）
-
----
-
-# 🧱 技術スタック（Tech Stack）
-
-| 分類          | 技術                      |
-| ----------- | ----------------------- |
-| 言語          | Python 3.11             |
-| Web フレームワーク | FastAPI                 |
-| 認証          | JWT（python-jose）        |
-| データベース      | SQLite（SQLAlchemy）      |
-| LLM         | Ollama                  |
-| Embeddings  | HuggingFaceEmeddings    |
-| RAG         | LangChain（RetrievalQA）  |
-| VectorDB    | Chroma                  |
-| コンテナ        | Docker / docker-compose |
+## 3. API の動き
+- `/register`：ユーザー新規登録。
+- `/login`：JWT を発行（レスポンス `access_token` を以後の Authorization に使う）。
+- `/chat`：  
+  - URL だけ送る → ページを取得して要約だけ返す（LLM 不使用）。  
+  - URL + 質問 or URL なし → 過去の履歴を付けて LLM へ投げる。  
+  - 履歴はユーザー/セッションごとに SQLite に保存。
+- `/history/search`：自分の履歴をキーワード検索（セッション ID で絞り込み可）。
+- `/rag/chat`：埋め込んだ自前データを検索し、回答と参照元スニペットを返す。
+- `/admin/users`：管理者だけがユーザー一覧を確認。
 
 ---
 
-# 📁 ディレクトリ構成（例）
-
-```text
-.
-├── main.py                      # FastAPI エントリーポイント
-├── requirements.txt             # 依存パッケージ
-├── docker-compose.yaml          # Docker構成
-├── .env                         # 環境変数
-├── data/
-│   └── chat.db                  # SQLite DB
-├── chroma_db/                   # ChromaベクトルDB
-└── src/
-    ├── config.py                # 定数（モデル名 / DBパス）
-    ├── rag_chain.py             # RAGチェーン定義
-    ├── prepare_data.py          # Chroma作成スクリプト
-    ├── loaders.py               # 文書読み込み
-    ├── embeddings.py            # Embeddingモデル定義
-    └── run_query.py             # RAG 単体テスト
-```
+## 4. ディレクトリの見どころ
+- `main.py`：FastAPI 起動とルーター登録。
+- `src/routers/`：各エンドポイントの実装。`chat_router.py` や `rag_router.py` を見れば挙動がわかる。
+- `src/auth.py`：認証・認可（JWT、パスワードハッシュ、admin チェック）。
+- `src/models.py`：SQLAlchemy モデルと Pydantic スキーマがまとまっている。
+- `src/utils/`：LLM 呼び出し、履歴保存、URL 取得などの補助。
+- `src/rag_chain.py`：LangChain の RetrievalQA を組み立てる場所。Chroma DB を読み込み。
+- `src/prepare_data.py`：RAG 用のベクトルデータを事前生成するスクリプト。
+- `docker-compose.yaml` / `Dockerfile`：API を 8080 ポートで公開するコンテナ設定。
 
 ---
 
-# 🔧 環境変数（.env）
-
-```env
-HUGGINGFACEHUB_API_TOKEN=your_token_here
-
-# Ollama ホスト（docker-compose に合わせる）
-OLLAMA_HOST=
-
-# LLM モデル名
-OLLAMA_MODEL=llama3
-
-# JWT 設定
-JWT_SECRET=CHANGE_THIS_SECRET_KEY
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-
-# SQLite のパス（デフォルト）
-DB_URL=sqlite:///./data/chat.db
-```
+## 5. 事前に知っておくこと
+- Python 3.10 以上推奨。
+- LLM バックエンドは OpenAI 互換の HTTP エンドポイントに投げます（例：vLLM、Ollama の OpenAI モード）。
+- 初回起動で `admin / password123` の管理ユーザーが自動作成されます。実運用ではすぐ変更してください。
+- パスワードハッシュはデモ用（SHA-256 + SECRET）。本番は bcrypt/argon2 への置き換え推奨。
 
 ---
 
-# ⚙️ セットアップ（Setup）
+## 6. 環境変数（主なもの）
+`.env` を置くか、コンテナ環境変数で指定します。デフォルト値は `src/config.py` 参照。
 
-## 1. リポジトリのクローン
-
-```bash
-git clone https://github.com/yourname/your-repo.git
-cd your-repo
-```
-
----
-
-## 2. Python 仮想環境（任意）
-
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+| 変数 | 役割 | 例 |
+| --- | --- | --- |
+| `VLLM_BASE_URL` | OpenAI 互換エンドポイント | `http://vllm:8010/v1` |
+| `OLLAMA_MODEL` | 利用するモデル名 | `Qwen/Qwen2-0.5B-Instruct` |
+| `DB_URL` | DB パス | `sqlite:///./data/chat.db` |
+| `JWT_SECRET` | JWT 署名キー | `CHANGE_THIS_SECRET_KEY` |
+| `JWT_ALGORITHM` | JWT アルゴリズム | `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | トークン有効期限 | `43200` (30日) |
+| `HUGGINGFACEHUB_API_TOKEN` | 埋め込みモデル用 | `<your_token>` |
 
 ---
 
-## 3. `.env` を作成
+## 7. 動かし方（2パターン）
 
-```bash
-cp .env.example .env
-```
-
-自分の環境に合わせて編集してください。
-
----
-
-## 4. Ollama の起動とモデル準備
-
-```bash
-ollama pull llama3
-ollama serve
-```
-
-接続確認：
-
-```bash
-curl http://localhost:11434/api/tags
-```
-
----
-
-## 5. ドキュメントの埋め込み（ChromaDB 構築）
-
-```bash
-python -m src.prepare_data
-```
-
----
-
-## 6. FastAPI の起動
-
-### A. 手動（ローカル）
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### B. Docker Compose
-
+### A. Docker Compose で簡単起動
 ```bash
 docker compose up --build
 ```
+- API: http://localhost:8080
+- vLLM などの LLM バックエンドは別途立ち上げておくこと（compose の `VLLM_BASE_URL` を合わせる）。
 
-Swagger UI：
-
+### B. ローカル Python で起動
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+export VLLM_BASE_URL=http://localhost:8010/v1  # 自分の環境に合わせる
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
-http://localhost:8000/docs
-```
+- API: http://localhost:8000
 
 ---
 
-# 🔗 API 一覧と curl サンプル
+## 8. RAG データを用意する手順
+1. `rag_data/` に PDF / Word / Excel / PPT / テキストなどを置く。
+2. 埋め込みを生成して ChromaDB を作成:
+   ```bash
+   python -m src.prepare_data
+   ```
+3. `chroma_db/` に永続化される。LangChain は起動時にここを読む。
+4. 任意で BM25 検索も使いたい場合は `chroma_db/bm25_documents.json` を置くとハイブリッド検索が有効になる。
 
-## ■ 1. ユーザー登録 `/register`
+---
 
+## 9. すぐ試せる API サンプル
+`BASE` は `http://localhost:8080`（ローカル起動なら 8000）。
+
+### 1) ユーザー登録
 ```bash
-curl -X POST "http://localhost:8000/register" \
+curl -X POST "$BASE/register" \
   -H "Content-Type: application/json" \
   -d '{"username":"user1","password":"pass1"}'
 ```
 
----
-
-## ■ 2. ログイン `/login`
-
+### 2) ログインしてトークン取得
 ```bash
-TOKEN=$(
-  curl -s -X POST "http://localhost:8000/login" \
+TOKEN=$(curl -s -X POST "$BASE/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"user1","password":"pass1"}' | jq -r '.access_token'
-)
+  -d '{"username":"user1","password":"pass1"}' | jq -r '.access_token')
 echo $TOKEN
 ```
 
----
-
-## ■ 3. 管理者ユーザー一覧 `/admin/users`
-
+### 3) チャット
 ```bash
-curl -X GET "http://localhost:8000/admin/users" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
-```
-
----
-
-## ■ 4. チャット `/chat`
-
-```bash
-curl -X POST "http://localhost:8000/chat" \
+curl -X POST "$BASE/chat" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"message":"Hello","session_id":"session-1"}'
+  -d '{"message":"こんにちは","session_id":"demo"}'
 ```
 
----
-
-## ■ 5. RAG チャット `/rag/chat`
-
+### 4) RAG チャット
 ```bash
-curl -X POST "http://localhost:8000/rag/chat" \
+curl -X POST "$BASE/rag/chat" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"question":"このRAGについて説明して","session_id":"rag1"}'
+  -d '{"question":"社内規程のポイントは？","session_id":"rag1"}'
 ```
 
----
-
-## ■ 6. 履歴検索 `/history/search`
-
+### 5) 履歴検索
 ```bash
-curl -G "http://localhost:8000/history/search" \
+curl -G "$BASE/history/search" \
   -H "Authorization: Bearer $TOKEN" \
-  --data-urlencode "q=Hello" \
-  --data-urlencode "session_id=session-1"
+  --data-urlencode "q=こんにちは" \
+  --data-urlencode "session_id=demo"
+```
+
+### 6) 管理者でユーザー一覧
+```bash
+ADMIN_TOKEN=... # admin でログインして取得
+curl "$BASE/admin/users" -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
 ---
 
-# 🔒 セキュリティ注意点（Security Notes）
-
-* パスワードは SHA-256 + SECRET を使用（本番は bcrypt/argon2 推奨）
-* JWT Secret は強力なランダム文字列を使用
-* EXPOSE している場合は HTTPS と Reverse Proxy（Nginx）を推奨
-* RAG データは「信頼できる文書」のみに限定
+## 10. 実運用で気をつけること
+- JWT シークレットは必ず強固な値に変える。
+- パスワードハッシュを bcrypt/argon2 に置き換える（デフォルトはデモ向け）。
+- HTTPS とリバースプロキシ (Nginx など) を挟む。
+- RAG に入れる文書は信頼できるものだけにし、権限管理を考慮する。
+- 管理者の初期パスワード `password123` はすぐ変更する。
 
 ---
+
+これで全体像と初期セットアップを押さえられます。コードを追うときは `main.py` → `src/routers/` → `src/utils/` の順に見ると理解しやすいです。

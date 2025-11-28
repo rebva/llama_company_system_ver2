@@ -5,8 +5,10 @@ services:
     ports:
       - "8080:8080"        # ホスト8080 -> コンテナ8080
     environment:
-#      - OLLAMA_HOST=http://ollama_rebva:11434
-      - OLLAMA_MODEL=Qwen/Qwen2-0.5B-Instruct   # 👈 追加
+      # ollamaは使用せずにvllmを利用しています。
+      - VLLM_BASE_URL=http://vllm:8010/v1
+      # 利用するモデル名（事前に対応バックエンドへデプロイ/登録しておく）
+      - OLLAMA_MODEL=Qwen/Qwen2-0.5B-Instruct
       - DB_URL=sqlite:///./data/chat.db
       - JWT_SECRET=CHANGE_THIS_SECRET_KEY
       - JWT_ALGORITHM=HS256

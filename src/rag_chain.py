@@ -6,7 +6,7 @@ import os
 from janome.tokenizer import Tokenizer
 
 from langchain.chains import RetrievalQA  # RetrievalQAチェーンを使った質問応答機能
-from langchain_community.llms import Ollama   # OllamaローカルLLMラッパー
+from langchain_openai import ChatOpenAI  # OpenAI互換API用チャットモデル
 from langchain_huggingface import HuggingFaceEmbeddings  # Hugging Face埋め込みモデルラッパー
 from langchain_chroma import Chroma  # vectordbをインポートする際のChromaモジュール
 
@@ -14,7 +14,7 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
-from src.config import OLLAMA_MODEL, CHROMA_DB_PATH  # モデル名とChromaDBパス設定を取得
+from src.config import OLLAMA_MODEL, CHROMA_DB_PATH, VLLM_BASE_URL  # モデル名とChromaDBパス設定を取得
 
 
 # ===== ハイブリッド用リトリーバー =====
@@ -127,9 +127,13 @@ def get_qa_chain() -> RetrievalQA:
         # フォールバック: BM25データがなければ意味検索だけ
         retriever = vector_retriever
 
-    # 5) OllamaローカルLLMを初期化: 指定モデルを読み込む
-    llm = Ollama(model=OLLAMA_MODEL,
-                base_url=os.getenv("OLLAMA_HOST", "http://ollama_rebva:11434"))
+    # 5) vLLM(OpenAI互換)を叩くチャットモデルを初期化
+    llm = ChatOpenAI(
+        base_url=VLLM_BASE_URL,               # 例: http://vllm:8010/v1
+        model=OLLAMA_MODEL,                   # vLLM 側でロード済みのモデル名
+        api_key=os.getenv("OPENAI_API_KEY", "dummy"),  # vLLM 用にダミーでも可
+        temperature=0,
+    )
 
     # 6) RetrievalQAチェーンを構築
     qa_chain = RetrievalQA.from_chain_type(

@@ -8,7 +8,7 @@ from typing import Optional, List
 import requests
 from fastapi import HTTPException
 
-from src.config import OLLAMA_HOST, OLLAMA_MODEL
+from src.config import VLLM_BASE_URL, OLLAMA_MODEL
 
 logger = logging.getLogger("llm_api")
 
@@ -30,7 +30,7 @@ def call_llm_backend(
     }
 
     resp = requests.post(
-        f"{OLLAMA_HOST}/v1/chat/completions",
+        f"{VLLM_BASE_URL}/chat/completions",
         json=payload,
         timeout=60,
     )
