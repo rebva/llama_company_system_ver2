@@ -1,21 +1,41 @@
+"""
+集中管理された設定値。
+- 既存の RAG 用設定を維持しつつ、API 全体で使う環境変数もここに集約する。
+"""
 from dotenv import load_dotenv
-import os  # os を利用して環境変数読み込み
+import os
 
-# .env ファイルから環境変数を読み込む
+# .env を読み込んで環境変数を事前にセット
 load_dotenv()
-# 共通設定
-# LLMモデル名を指定
-OLLAMA_MODEL   = "hf.co/elyza/Llama-3-ELYZA-JP-8B-GGUF"
+
+# ===== RAG 用設定（既存） =====
+# LLMモデル名（環境変数 OLLAMA_MODEL 優先、なければ簡易デフォルト）
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 # Windows環境でOllamaのnamed pipeソケットパス
-OLLAMA_SOCKET  = r"\\.\pipe\ollama.sock"
+OLLAMA_SOCKET = r"\\.\pipe\ollama.sock"
 # ドキュメント格納フォルダパス
-DATA_FOLDER    = "./rag_data"
+DATA_FOLDER = "./rag_data"
 # ChromaDBの永続ストアパス
 CHROMA_DB_PATH = "./chroma_db"
-# Hugging Face Hub 用トークン
-# 環境変数 HUGGINGFACEHUB_API_TOKEN を優先して利用
-HUGGINGFACEHUB_API_TOKEN = os.getenv(
-  "HUGGINGFACEHUB_API_TOKEN"
-  )
-# モジュール読み込み時に必ず環境変数にも登録
-os.environ["HUGGINGFACEHUB_API_TOKEN"] = HUGGINGFACEHUB_API_TOKEN
+# Hugging Face Hub 用トークン（環境変数を優先）
+HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+os.environ["HUGGINGFACEHUB_API_TOKEN"] = HUGGINGFACEHUB_API_TOKEN or ""
+
+# ===== API 共通設定（新規追加） =====
+# LLM バックエンド（Ollama/vLLM）エンドポイント
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama_rebva:11434")
+# データベース URL（デフォルトは SQLite）
+DB_URL = os.getenv("DB_URL", "sqlite:///./data/chat.db")
+# JWT 設定
+JWT_SECRET = os.getenv("JWT_SECRET", "CHANGE_THIS_SECRET_KEY")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+
+# HTTP リクエスト共通ヘッダ（スクレイピング用）
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
+}
