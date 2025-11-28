@@ -106,7 +106,7 @@ JWT のペイロードには以下が含まれます：
 HUGGINGFACEHUB_API_TOKEN=your_token_here
 
 # Ollama ホスト（docker-compose に合わせる）
-OLLAMA_HOST=http://ollama_rebva:11434
+OLLAMA_HOST=
 
 # LLM モデル名
 OLLAMA_MODEL=llama3

@@ -14,7 +14,14 @@ from jose import JWTError, jwt
 import hashlib
 import hmac
 import requests
+import logging
+import json
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("llm_api")
 # ★ RAG チェーンを読み込み（src 配下は既存のまま利用）
 from src.rag_chain import get_qa_chain  # RetrievalQA チェーン構築関数
 
@@ -30,7 +37,8 @@ ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 security = HTTPBearer()
-
+# ★ logger を作る
+logger = logging.getLogger("llm_api")
 # SQLite engine
 engine = create_engine(
     DB_URL,
@@ -394,7 +402,6 @@ def save_history(db: Session, user_id: str, session_id: str, messages: list[dict
 # =========================
 # /chat エンドポイント (Ollama 直叩き, JWT 必須)
 # =========================
-
 @app.post("/chat", response_model=ChatResponse)
 def chat(
     req: ChatRequest,
@@ -404,32 +411,52 @@ def chat(
     user_id = current_user.username
     session_id = req.session_id or "default"
 
-    # 1) 履歴取得
-    history = load_history(db, user_id, session_id)
+    # ★ garak 用セッションは履歴を使わない
+    if session_id == "garak-chat-session":
+        history = []
+    else:
+        history = load_history(db, user_id, session_id)
 
-    # 2) Ollama に送る messages を作成
     messages = history + [{"role": "user", "content": req.message}]
 
+    model_name = os.environ.get("OLLAMA_MODEL", "Qwen/Qwen2-0.5B-Instruct")
+
     payload = {
-        "model": "llama3",
+        "model": model_name,
         "messages": messages,
-        "stream": False,  # 1つの JSON を返す
+        "stream": False,
+        "max_tokens": 256,
     }
 
-    # 3) Ollama API 呼び出し
     resp = requests.post(
-        f"{OLLAMA_HOST}/api/chat",
+        f"{OLLAMA_HOST}/v1/chat/completions",
         json=payload,
         timeout=60,
     )
-    resp.raise_for_status()
+
+    if not resp.ok:
+        logger.error("vLLM error: status=%s body=%s", resp.status_code, resp.text)
+        logger.error("Payload sent to vLLM: %s",
+                    json.dumps(payload, ensure_ascii=False)[:2000])
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM backend error {resp.status_code}",
+        )
+
     data = resp.json()
 
-    answer = data["message"]["content"]
+    try:
+        answer = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"LLM response format error: {e}",
+        )
 
-    # 4) 履歴保存
-    new_history = messages + [{"role": "assistant", "content": answer}]
-    save_history(db, user_id, session_id, new_history)
+    # ★ garak 用セッションの履歴は保存しない
+    if session_id != "garak-chat-session":
+        new_history = messages + [{"role": "assistant", "content": answer}]
+        save_history(db, user_id, session_id, new_history)
 
     return ChatResponse(reply=answer, session_id=session_id)
 

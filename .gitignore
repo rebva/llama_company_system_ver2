@@ -6,3 +6,4 @@ data/
 chroma_db/
 api_login.sh
 rag_data/
+setting.txt

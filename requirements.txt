@@ -19,3 +19,5 @@ unidic-lite
 janome
 pandas
 transformers[ja]
+requests
+beautifulsoup4
