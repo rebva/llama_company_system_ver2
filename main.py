@@ -28,8 +28,8 @@ app = FastAPI()
 # ==== CORS 全開放（フロントから直接叩きたいので） ====
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # 本番ならドメインを絞るのが推奨
-    allow_credentials=False,
+    allow_origins=["http://localhost:8080", "http://sawachi2:8080"],      # 本番ならドメインを絞るのが推奨
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
