@@ -294,7 +294,10 @@
     }
 
     async function api(path, options = {}) {
-      const base = el("base-url").value.trim().replace(/\/$/, "");
+        // 入力が空なら現在表示中のオリジン(origin: 今のURLのスキーム＋ホスト＋ポート)を使う
+      const baseInput = el("base-url").value.trim();
+      const base = (baseInput || window.location.origin).replace(/\/$/, "");
+
       const token = el("token").value.trim();
       const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
       if (token) headers["Authorization"] = "Bearer " + token;
