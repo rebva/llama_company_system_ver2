@@ -1,18 +1,14 @@
 """
 FastAPI エントリーポイント。
-- main.py は「司令塔」として各 router を呼び出し、起動時の初期化も担当。
+- main.py は「旅館の女将」役として各 router を案内するだけに絞る。
 """
 import logging
-<<<<<<< HEAD
 from pathlib import Path
 
-=======
- 
->>>>>>> 153f32bf5a54fab46b04cdcf4ee5a3a1965abbd8
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware  # CORS
+from fastapi.responses import HTMLResponse          # HTML を返す
+from fastapi.staticfiles import StaticFiles         # static ファイル
 
 from src.auth import create_user, get_user_by_username
 from src.database import engine, SessionLocal
@@ -25,33 +21,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger("llm_api")
 
-BASE_DIR = Path(__file__).resolve().parent
-INDEX_PATH = BASE_DIR / "index.html"
-STATIC_DIR = BASE_DIR / "static"
-
+# ==== FastAPI アプリ本体 ====
 app = FastAPI()
 
-# CORS: ローカルの index.html から直接叩けるように全許可
+# ==== CORS 全開放（フロントから直接叩きたいので） ====
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],      # 本番ならドメインを絞るのが推奨
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 静的ファイル (存在する場合のみマウント)
+# ==== index.html / static のパス設定 ====
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_PATH = BASE_DIR / "index.html"
+STATIC_DIR = BASE_DIR / "static"
+
+# static ディレクトリがあれば /static にマウント
 if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# ルートで index.html を返す簡易フロント
-@app.get("/")
-def serve_index():
+
+# ==== ルートで UI を返す ====
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """
+    ルートにアクセスされたら index.html をそのまま返す。
+    なければ簡易メッセージ。
+    """
     if INDEX_PATH.exists():
-        return FileResponse(INDEX_PATH)
-    return {"message": "LLM API"}
+        return INDEX_PATH.read_text(encoding="utf-8")
+    return "<h1>index.html not found</h1>"
 
-# ルーター登録 (エンドポイント郡は src/routers 配下)
+
+# ==== ルータ登録（API エンドポイント） ====
 app.include_router(auth_router.router)
 app.include_router(admin_router.router)
 app.include_router(chat_router.router)
@@ -63,7 +67,7 @@ def on_startup():
     """
     アプリ起動時の初期化。
     - DB テーブル作成
-    - デフォルト admin ユーザー作成
+    - デフォルト admin ユーザ作成
     - RAG チェーン初期化
     """
     Base.metadata.create_all(bind=engine)
