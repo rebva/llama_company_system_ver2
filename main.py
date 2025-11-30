@@ -1,6 +1,7 @@
 """
 FastAPI エントリーポイント。
 - main.py は「旅館の女将」役として各 router を案内するだけに絞る。
+- main.py は「旅館の女将」役として各 router を案内するだけに絞る。
 """
 import logging
 from pathlib import Path
@@ -68,6 +69,7 @@ def on_startup():
     アプリ起動時の初期化。
     - DB テーブル作成
     - デフォルト admin ユーザ作成
+    - デフォルト admin ユーザ作成
     - RAG チェーン初期化
     """
     Base.metadata.create_all(bind=engine)
@@ -82,3 +84,4 @@ def on_startup():
         db.close()
 
     rag_router.init_rag_chain()
+
