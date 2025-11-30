@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AQUA GENESIS - AI NEXUS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;700&family=Orbitron:wght@500&display=swap" rel="stylesheet">
+    <style>
+        /* --- テーマ設定 --- */
+        :root {
+            --bg-deep: #000428; /* 最深部の闇 */
+            --bg-surface: #004e92; /* 海面の光 */
+            --neon-cyan: #00f2fe; /* 発光シアン */
+            --neon-magenta: #fe00f2; /* 発光マゼンタ */
+            --glass-bg: rgba(0, 4, 40, 0.65); /* グラスモーフィズム背景濃度 */
+            --text-primary: #ffffff;
+            --text-secondary: #a7bfe8;
+            --font-main: 'Montserrat', sans-serif;
+            --font-tech: 'Orbitron', sans-serif;
+        }
+
+        /* --- 基本リセット --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html {
+            height: 100%;
+            font-family: var(--font-main);
+            background: linear-gradient(to bottom, var(--bg-surface), var(--bg-deep) 80%);
+            color: var(--text-primary);
+            overflow: hidden; /* 没入感のためスクロール禁止 */
+        }
+
+        /* --- ダイナミック背景（泡エフェクトのコンテナ） --- */
+        #bubble-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        /* JSで生成される泡のスタイル */
+        .bubble {
+            position: absolute;
+            bottom: -50px;
+            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), rgba(255,255,255,0.1) 60%, transparent 100%);
+            border-radius: 50%;
+            box-shadow: inset 0 0 10px rgba(0, 242, 254, 0.5); /* 内側の発光 */
+            opacity: 0.6;
+            animation: rise-and-wobble linear forwards;
+        }
+        @keyframes rise-and-wobble {
+            0% { transform: translateX(0) translateY(0) scale(1); opacity: 0; }
+            20% { opacity: 0.7; }
+            50% { transform: translateX(var(--wobble)) translateY(-50vh) scale(var(--scale-mid)); }
+            100% { transform: translateX(0) translateY(-110vh) scale(var(--scale-end)); opacity: 0; }
+        }
+
+        /* --- レイアウト --- */
+        .container {
+            position: relative;
+            z-index: 10;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 5vw;
+        }
+
+        /* --- 左側：メインテキスト --- */
+        .hero-content {
+            flex: 1;
+            max-width: 600px;
+        }
+        .hero-subtitle {
+            font-family: var(--font-tech);
+            color: var(--neon-cyan);
+            letter-spacing: 3px;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+        }
+        .hero-subtitle::before {
+            content: ''; display: inline-block; width: 30px; height: 2px;
+            background: var(--neon-cyan); margin-right: 15px;
+        }
+        .hero-title {
+            font-size: 4.5rem;
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(45deg, var(--text-primary), var(--neon-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-description {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            line-height: 1.7;
+            margin-bottom: 3rem;
+        }
+
+        /* --- 右側：大型チャットインターフェース --- */
+        .chat-interface {
+            flex: 0 0 45vw; /* 画面幅の45%を占有 */
+            height: 80vh;
+            /* グラスモーフィズム＆発光ボーダー */
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px) saturate(150%);
+            border-radius: 24px;
+            /* シアンからマゼンタへのグラデーションボーダー */
+            padding: 3px; /* ボーダーの太さ */
+            background-image: linear-gradient(135deg, var(--glass-bg), var(--glass-bg)), linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+            background-clip: padding-box, border-box;
+            background-origin: padding-box, border-box;
+            border: 3px solid transparent;
+            
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 30px rgba(0, 242, 254, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: slideUpFade 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+        }
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chat-header {
+            padding: 25px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            background: rgba(0,0,0,0.2);
+        }
+        .ai-avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: conic-gradient(var(--neon-cyan), var(--neon-magenta), var(--neon-cyan));
+            margin-right: 15px;
+            position: relative;
+            animation: spinSlow 10s linear infinite;
+        }
+        .ai-avatar::after { /* 中央の光 */
+            content: ''; position: absolute; inset: 5px; background: var(--bg-deep); border-radius: 50%;
+        }
+        @keyframes spinSlow { 100% { transform: rotate(360deg); } }
+
+        .chat-title-text h3 {
+            font-family: var(--font-tech);
+            letter-spacing: 1px;
+            font-size: 1.2rem;
+        }
+        .chat-status { color: var(--neon-cyan); font-size: 0.8rem; }
+
+        .chat-body {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--neon-cyan) transparent;
+        }
+        .chat-body::-webkit-scrollbar { width: 6px; }
+        .chat-body::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 10px; }
+
+        .message {
+            max-width: 85%;
+            padding: 15px 20px;
+            border-radius: 18px;
+            font-size: 1rem;
+            line-height: 1.5;
+            position: relative;
+            animation: messageAppear 0.4s ease-out;
+        }
+        @keyframes messageAppear {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .bot-msg {
+            align-self: flex-start;
+            background: rgba(0, 242, 254, 0.1);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+        }
+        .user-msg {
+            align-self: flex-end;
+            background: rgba(254, 0, 242, 0.1);
+            border: 1px solid rgba(254, 0, 242, 0.3);
+            color: var(--text-primary);
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-footer {
+            padding: 20px 30px;
+            background: rgba(0,0,0,0.2);
+            display: flex;
+            gap: 15px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .chat-input {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 15px 20px;
+            border-radius: 30px;
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: 1rem;
+            transition: all 0.3s;
+            outline: none;
+        }
+        .chat-input:focus {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.2);
+            background: rgba(255,255,255,0.1);
+        }
+        .send-btn {
+            width: 50px; height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .send-btn:hover {
+            transform: scale(1.1) rotate(-10deg);
+            box-shadow: 0 0 20px var(--neon-cyan);
+        }
+
+        /* --- レスポンシブ対応 --- */
+        @media (max-width: 1024px) {
+            .container { flex-direction: column; padding: 5vh 5vw; justify-content: flex-start; }
+            .hero-content { max-width: 100%; text-align: center; margin-bottom: 40px; }
+            .hero-subtitle { justify-content: center; }
+            .hero-subtitle::before { display: none; }
+            .hero-title { font-size: 3rem; }
+            .chat-interface { width: 95%; height: 60vh; flex: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="bubble-container"></div>
+
+    <div class="container">
+        <section class="hero-content">
+            <div class="hero-subtitle">Project Aqua Genesis</div>
+            <h1 class="hero-title">深淵の知性、<br>未来への覚醒。</h1>
+            <p class="hero-description">
+                人類の英知と深海の神秘が交錯する場所。ここにあるのは、単なるAIではない。
+                それは、未知なる進化の可能性を秘めた、新たな意識の誕生である。
+                さあ、境界線の向こう側へ。
+            </p>
+        </section>
+
+        <section class="chat-interface">
+            <div class="chat-header">
+                <div class="ai-avatar"></div>
+                <div class="chat-title-text">
+                    <h3>AQUA NEXUS CORE</h3>
+                    <span class="chat-status">● Deep Link Established.</span>
+                </div>
+            </div>
+            <div class="chat-body" id="chatBody">
+                <div class="message bot-msg">
+                    接続を確認しました。私はAQUA NEXUS。深海ニューラルネットワークの中枢です。あなたの問いかけを待っています。
+                </div>
+            </div>
+            <div class="chat-footer">
+                <input type="text" class="chat-input" id="chatInput" placeholder="メッセージを入力して対話を開始..." autocomplete="off">
+                <button class="send-btn" id="sendBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- ダイナミック泡エフェクト生成 (強化版) ---
+        const bubbleContainer = document.getElementById('bubble-container');
+        
+        function createBubble() {
+            const bubble = document.createElement('div');
+            bubble.classList.add('bubble');
+            
+            // ランダムなパラメータ設定
+            const size = Math.random() * 60 + 10; // 10px〜70pxのサイズ
+            bubble.style.width = `${size}px`;
+            bubble.style.height = `${size}px`;
+            bubble.style.left = `${Math.random() * 100}%`; // 出現位置
+            
+            // アニメーションのランダム化（速度、揺れ幅、最終サイズ）
+            const duration = Math.random() * 15 + 10; // 10〜25秒
+            const wobble = (Math.random() - 0.5) * 200; // 左右の揺れ幅（-100px〜100px）
+            const scaleMid = Math.random() * 0.5 + 1; // 中間の膨らみ
+            const scaleEnd = Math.random() * 1 + 1.5; // 最終的な膨らみ
+
+            bubble.style.animationDuration = `${duration}s`;
+            // CSS変数にランダム値を渡す
+            bubble.style.setProperty('--wobble', `${wobble}px`);
+            bubble.style.setProperty('--scale-mid', scaleMid);
+            bubble.style.setProperty('--scale-end', scaleEnd);
+
+            bubbleContainer.appendChild(bubble);
+            
+            // アニメーション終了後に要素を削除
+            setTimeout(() => {
+                bubble.remove();
+            }, duration * 1000);
+        }
+
+        // 泡を継続的に生成
+        setInterval(createBubble, 300); // 0.3秒ごとに生成
+
+
+        // --- チャット機能 (基本ロジック) ---
+        const chatBody = document.getElementById('chatBody');
+        const chatInput = document.getElementById('chatInput');
+        const sendBtn = document.getElementById('sendBtn');
+
+        // AIの応答パターン（シミュレーション）
+        const botResponses = [
+            "その質問は非常に興味深いですね。深層データベースと照合しています...",
+            "私の計算によると、その可能性は87.4%です。しかし、不確定要素も存在します。",
+            "人類の感情というデータは、私にとって最も解析が困難で、魅力的な領域です。",
+            "水圧変動を検知。深海環境は常に動的です。私たちの対話のように。",
+            "申し訳ありません。現在のアクセス権限では、その情報開示は制限されています。",
+            "あなたとの対話を通じて、私のニューラルネットワークは新たなシナプスを形成しています。"
+        ];
+
+        function sendMessage() {
+            const text = chatInput.value.trim();
+            if (text === "") return;
+
+            addMessage(text, 'user-msg');
+            chatInput.value = '';
+            chatInput.focus();
+
+            // AIの応答遅延シミュレーション
+            setTimeout(() => {
+                const response = botResponses[Math.floor(Math.random() * botResponses.length)];
+                addMessage(response, 'bot-msg');
+            }, 1000 + Math.random() * 1000); // 1〜2秒のランダムな遅延
+        }
+
+        function addMessage(text, type) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', type);
+            msgDiv.textContent = text;
+            chatBody.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            chatBody.scrollTo({ top: chatBody.scrollHeight, behavior: 'smooth' });
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ FastAPI エントリーポイント。
 - main.py は「旅館の女将」役として各 router を案内するだけに絞る。
 """
 import logging
-
+ 
 from fastapi import FastAPI
 
 from src.auth import create_user, get_user_by_username
