@@ -3,8 +3,12 @@ FastAPI エントリーポイント。
 - main.py は「司令塔」として各 router を呼び出し、起動時の初期化も担当。
 """
 import logging
+<<<<<<< HEAD
 from pathlib import Path
 
+=======
+ 
+>>>>>>> 153f32bf5a54fab46b04cdcf4ee5a3a1965abbd8
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
