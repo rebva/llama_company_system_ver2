@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Chat Console</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --card: #1f2937;
+      --accent: #60a5fa;
+      --accent-2: #f59e0b;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #243045;
+      --error: #f87171;
+      --success: #34d399;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Noto Sans JP", system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(120% 120% at 10% 10%, rgba(96,165,250,0.1), transparent 40%),
+        radial-gradient(120% 120% at 90% 10%, rgba(245,158,11,0.14), transparent 45%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+    .shell {
+      width: min(1200px, 100%);
+      background: linear-gradient(145deg, rgba(31,41,55,0.95), rgba(17,24,39,0.92));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      backdrop-filter: blur(8px);
+    }
+    header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(120deg, rgba(96,165,250,0.14), rgba(96,165,250,0));
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.3px;
+    }
+    .badge {
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 16px;
+      padding: 16px;
+    }
+    @media (max-width: 960px) {
+      .grid { grid-template-columns: 1fr; }
+      body { padding: 12px; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      letter-spacing: 0.2px;
+      color: var(--muted);
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0d1526;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+    }
+    textarea { resize: vertical; min-height: 110px; }
+    button {
+      background: linear-gradient(120deg, var(--accent), #3b82f6);
+      border: none;
+      color: #0b1220;
+      font-weight: 700;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      width: 100%;
+      transition: transform 0.08s ease, filter 0.1s ease;
+      font-size: 14px;
+    }
+    button.secondary {
+      background: #111827;
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    button:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    .status {
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 20px;
+      white-space: pre-line;
+    }
+    .status.error { color: var(--error); }
+    .status.ok { color: var(--success); }
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 520px;
+      overflow-y: auto;
+    }
+    .bubble {
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .bubble.user { background: #0d1526; }
+    .bubble.assistant { background: #0b1220; }
+    .sources { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .pill-toggle {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      background: #0d1526;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 8px;
+    }
+    .pill-toggle button {
+      width: 100%;
+      padding: 8px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .pill-toggle button.active {
+      background: linear-gradient(120deg, var(--accent-2), #fbbf24);
+      color: #0d0f1a;
+    }
+    .list {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #0d1526;
+      padding: 10px;
+      max-height: 320px;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+    .list-item {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: pre-wrap;
+    }
+    .list-item:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <h1>LLM Chat Console</h1>
+      <span class="badge" id="auth-badge">未ログイン</span>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h2>認証</h2>
+        <label>API ベース URL</label>
+        <input id="base-url" value="http://localhost:8080" />
+        <div class="row">
+          <div>
+            <label>ユーザー名</label>
+            <input id="username" placeholder="admin" />
+          </div>
+          <div>
+            <label>パスワード</label>
+            <input id="password" type="password" placeholder="password123" />
+          </div>
+        </div>
+        <div class="row">
+          <button onclick="login()">ログイン</button>
+          <button class="secondary" onclick="registerUser()">登録</button>
+        </div>
+        <div class="status" id="auth-status"></div>
+      </div>
+
+      <div class="card">
+        <h2>チャット</h2>
+        <div class="pill-toggle">
+          <button id="tab-chat" class="active" onclick="setMode('chat')">通常チャット</button>
+          <button id="tab-rag" onclick="setMode('rag')">RAG</button>
+        </div>
+        <div class="row">
+          <div>
+            <label>セッションID</label>
+            <input id="session-id" placeholder="demo" />
+          </div>
+          <div>
+            <label>トークン</label>
+            <input id="token" placeholder="(ログイン後自動セット)" />
+          </div>
+        </div>
+        <label id="prompt-label">メッセージ（URLのみ→要約 / URL+質問 or テキスト→LLM応答）</label>
+        <textarea id="message" placeholder="https://example.com\n\nこのページを要約して"></textarea>
+        <button onclick="sendMessage()">送信</button>
+        <div class="status" id="chat-status"></div>
+      </div>
+
+      <div class="card">
+        <h2>履歴検索</h2>
+        <label>キーワード</label>
+        <input id="history-q" placeholder="例: セキュリティ" />
+        <label>セッションID（任意）</label>
+        <input id="history-session" placeholder="demo" />
+        <button onclick="searchHistory()">検索</button>
+        <div class="list" id="history-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>レスポンス</h2>
+        <div class="messages" id="messages"></div>
+      </div>
+
+      <div class="card">
+        <h2>管理者: ユーザー一覧</h2>
+        <button class="secondary" onclick="loadUsers()">取得</button>
+        <div class="list" id="users-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let mode = "chat";
+    const el = (id) => document.getElementById(id);
+
+    function setStatus(id, msg, ok = false, err = false) {
+      const box = el(id);
+      box.textContent = msg || "";
+      box.classList.remove("ok", "error");
+      if (ok) box.classList.add("ok");
+      if (err) box.classList.add("error");
+    }
+
+    function setMode(next) {
+      mode = next;
+      el("tab-chat").classList.toggle("active", mode === "chat");
+      el("tab-rag").classList.toggle("active", mode === "rag");
+      el("prompt-label").textContent =
+        mode === "chat"
+          ? "メッセージ（URLのみ→要約 / URL+質問 or テキスト→LLM応答）"
+          : "質問（RAG: ベクトルDB/BM25で検索して回答）";
+    }
+
+    function saveToken(token) {
+      el("token").value = token || "";
+      el("auth-badge").textContent = token ? "ログイン済" : "未ログイン";
+    }
+
+    async function api(path, options = {}) {
+      const base = el("base-url").value.trim().replace(/\/$/, "");
+      const token = el("token").value.trim();
+      const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      const resp = await fetch(base + path, { ...options, headers });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`${resp.status}: ${text}`);
+      }
+      const ct = resp.headers.get("content-type") || "";
+      if (ct.includes("application/json")) return resp.json();
+      return resp.text();
+    }
+
+    async function login() {
+      setStatus("auth-status", "ログイン中...");
+      try {
+        const data = await api("/login", {
+          method: "POST",
+          body: JSON.stringify({
+            username: el("username").value,
+            password: el("password").value,
+          }),
+        });
+        saveToken(data.access_token);
+        setStatus("auth-status", "ログイン成功", true);
+      } catch (e) {
+        setStatus("auth-status", e.message, false, true);
+      }
+    }
+
+    async function registerUser() {
+      setStatus("auth-status", "登録中...");
+      try {
+        await api("/register", {
+          method: "POST",
+          body: JSON.stringify({
+            username: el("username").value,
+            password: el("password").value,
+          }),
+        });
+        setStatus("auth-status", "登録完了。続けてログインしてください", true);
+      } catch (e) {
+        setStatus("auth-status", e.message, false, true);
+      }
+    }
+
+    function appendMessage(role, content, sources = []) {
+      const wrap = document.createElement("div");
+      wrap.className = "bubble " + role;
+      const header = document.createElement("div");
+      header.style.fontSize = "12px";
+      header.style.color = "var(--muted)";
+      header.textContent = role.toUpperCase();
+      wrap.appendChild(header);
+      const body = document.createElement("div");
+      body.textContent = content;
+      wrap.appendChild(body);
+
+      if (sources.length) {
+        const src = document.createElement("div");
+        src.className = "sources";
+        src.textContent = "Sources: " + sources.map((s) => `${s.source} (${s.snippet})`).join(" / ");
+        wrap.appendChild(src);
+      }
+      el("messages").appendChild(wrap);
+      el("messages").scrollTop = el("messages").scrollHeight;
+    }
+
+    async function sendMessage() {
+      const message = el("message").value.trim();
+      if (!message) return;
+      const sessionId = el("session-id").value.trim() || "default";
+      const path = mode === "chat" ? "/chat" : "/rag/chat";
+      const payload = mode === "chat"
+        ? { message, session_id: sessionId }
+        : { question: message, session_id: sessionId };
+
+      setStatus("chat-status", "送信中...");
+      appendMessage("user", message);
+      try {
+        const data = await api(path, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        if (mode === "chat") {
+          appendMessage("assistant", data.reply || "");
+          setStatus("chat-status", "OK", true);
+        } else {
+          appendMessage("assistant", data.answer || "", data.sources || []);
+          setStatus("chat-status", "OK (RAG)", true);
+        }
+        el("message").value = "";
+      } catch (e) {
+        setStatus("chat-status", e.message, false, true);
+      }
+    }
+
+    async function searchHistory() {
+      const q = el("history-q").value.trim();
+      if (!q) return;
+      const params = new URLSearchParams({ q });
+      const sessionId = el("history-session").value.trim();
+      if (sessionId) params.append("session_id", sessionId);
+      setStatus("chat-status", "履歴検索中...");
+      try {
+        const data = await api("/history/search?" + params.toString());
+        const list = el("history-list");
+        list.innerHTML = "";
+        data.forEach((item) => {
+          const div = document.createElement("div");
+          div.className = "list-item";
+          div.innerHTML = `<strong>${item.role}</strong> [${item.session_id}]<br>${item.content}`;
+          list.appendChild(div);
+        });
+        setStatus("chat-status", "履歴取得成功", true);
+      } catch (e) {
+        setStatus("chat-status", e.message, false, true);
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const data = await api("/admin/users");
+        const list = el("users-list");
+        list.innerHTML = "";
+        data.forEach((u) => {
+          const div = document.createElement("div");
+          div.className = "list-item";
+          div.textContent = `${u.id}: ${u.username} (${u.role})`;
+          list.appendChild(div);
+        });
+        setStatus("chat-status", "ユーザー取得成功 (admin token が必要です)", true);
+      } catch (e) {
+        setStatus("chat-status", e.message, false, true);
+      }
+    }
+  </script>
+</body>
+</html>
