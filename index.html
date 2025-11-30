@@ -206,20 +206,27 @@
         <input id="base-url" value="http://sawachi2:8080" />
         <div class="row">
           <div>
-            <label>ユーザー名</label>
-            <input id="username" placeholder="admin" />
-          </div>
-          <div>
-            <label>パスワード</label>
-            <input id="password" type="password" placeholder="password123" />
-          </div>
+             <label>ユーザー名</label>
+      <!-- value に admin を入れておく -->
+        <input id="username" value="admin" placeholder="admin" />
         </div>
-        <div class="row">
-          <button onclick="login()">ログイン</button>
-          <button class="secondary" onclick="registerUser()">登録</button>
+        <div>
+        <label>パスワード</label>
+        <!-- value に password123 を入れておく -->
+        <input
+            id="password"
+            type="password"
+            value="password123"
+            placeholder="password123"
+        />
         </div>
-        <div class="status" id="auth-status"></div>
-      </div>
+    </div>
+    <div class="row">
+        <button onclick="login()">ログイン</button>
+        <button class="secondary" onclick="registerUser()">登録</button>
+    </div>
+    <div class="status" id="auth-status"></div>
+    </div>
 
       <div class="card">
         <h2>チャット</h2>
