@@ -15,6 +15,8 @@ from src.auth import create_user, get_user_by_username
 from src.database import engine, SessionLocal
 from src.models import Base
 from src.routers import admin_router, auth_router, chat_router, rag_router
+from src.routers import sql_safe_router, agent_sql_router
+from src.routers import sql_safe_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,6 +63,8 @@ app.include_router(auth_router.router)
 app.include_router(admin_router.router)
 app.include_router(chat_router.router)
 app.include_router(rag_router.router)
+app.include_router(sql_safe_router.router)
+app.include_router(agent_sql_router.router)
 
 
 @app.on_event("startup")
@@ -84,4 +88,3 @@ def on_startup():
         db.close()
 
     rag_router.init_rag_chain()
-

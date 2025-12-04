@@ -14,7 +14,7 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
-from src.config import OLLAMA_MODEL, CHROMA_DB_PATH, VLLM_BASE_URL  # モデル名とChromaDBパス設定を取得
+from src.config import LLM_MODEL, CHROMA_DB_PATH, VLLM_BASE_URL  # モデル名とChromaDBパス設定を取得
 
 
 # ===== ハイブリッド用リトリーバー =====
@@ -129,8 +129,8 @@ def get_qa_chain() -> RetrievalQA:
 
     # 5) vLLM(OpenAI互換)を叩くチャットモデルを初期化
     llm = ChatOpenAI(
-        base_url=VLLM_BASE_URL,               # 例: http://vllm:8010/v1
-        model=OLLAMA_MODEL,                   # vLLM 側でロード済みのモデル名
+        base_url=VLLM_BASE_URL,               # 例: http://vllm:8000/v1
+        model=LLM_MODEL,                   # vLLM 側でロード済みのモデル名
         api_key=os.getenv("OPENAI_API_KEY", "dummy"),  # vLLM 用にダミーでも可
         temperature=0,
     )

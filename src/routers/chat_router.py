@@ -113,7 +113,10 @@ def chat(
 
 @router.get("/history/search", response_model=List[HistoryItem])
 def search_history(
-    q: str = Query(..., min_length=1, description="keyword to search"),
+    q: Optional[str] = Query(
+        None,
+        description="keyword to search; omitted to fetch latest",
+    ),
     session_id: Optional[str] = Query(None, description="filter by session_id"),
     limit: int = Query(50, ge=1, le=500, description="max results"),
     current_user: User = Depends(get_current_user),
@@ -122,12 +125,24 @@ def search_history(
     """ログインユーザ(current_user) の会話履歴をキーワード検索。"""
     from src.models import Conversation  # 遅延インポートで循環を避ける
 
+    keyword = q.strip() if q else None
+
     query = db.query(Conversation).filter(
         Conversation.user_id == current_user.username,
-        Conversation.content.like(f"%{q}%"),
     )
 
-    if session_id:
+    # キーワード指定時は「キーワードにヒットしたセッションの全メッセージ」を返す
+    # （ユーザ発話にだけ含まれるキーワードでも、返信もセットで取得するため）
+    if keyword:
+        session_filter = db.query(Conversation.session_id).filter(
+            Conversation.user_id == current_user.username,
+            Conversation.content.like(f"%{keyword}%"),
+        )
+        if session_id:
+            session_filter = session_filter.filter(Conversation.session_id == session_id)
+
+        query = query.filter(Conversation.session_id.in_(session_filter))
+    elif session_id:
         query = query.filter(Conversation.session_id == session_id)
 
     rows = (

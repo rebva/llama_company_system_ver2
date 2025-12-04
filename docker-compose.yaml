@@ -6,9 +6,9 @@ services:
       - "8080:8080"        # ホスト8080 -> コンテナ8080
     environment:
       # ollamaは使用せずにvllmを利用しています。
-      - VLLM_BASE_URL=http://vllm:8010/v1
+      - VLLM_BASE_URL=${VLLM_BASE_URL:?VLLM_BASE_URL is not set in .env}
       # 利用するモデル名（事前に対応バックエンドへデプロイ/登録しておく）
-      - OLLAMA_MODEL=Qwen/Qwen2-0.5B-Instruct
+      - LLM_MODEL=${LLM_MODEL:?LLM_MODEL is not set in .env}
       - DB_URL=sqlite:///./data/chat.db
       - JWT_SECRET=CHANGE_THIS_SECRET_KEY
       - JWT_ALGORITHM=HS256
@@ -17,8 +17,12 @@ services:
       - ./data:/app/data
       - ./chroma_db:/app/chroma_db
     networks:
+      - vllm-net
       - garak-net
 
 networks:
   garak-net:
+    external: true
+  
+  vllm-net:
     external: true

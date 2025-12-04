@@ -3,556 +3,265 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Abyssal Nexus Console</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&family=Zen+Kaku+Gothic+New:wght@300;500;700&display=swap"
-      rel="stylesheet"
-    />
-
+    <title>LLM Chat Console</title>
     <style>
       :root {
-        /* Theme: Deep Sea Future */
-        --bg-deep: #02060c; /* 深海色 */
-        --glass-bg: rgba(10, 25, 40, 0.55); /* 少し青みのあるガラス */
-        --glass-border: rgba(100, 200, 255, 0.15); /* 水色の境界線 */
-        --primary: #00ffea; /* Bioluminescent Aqua */
-        --secondary: #0066ff; /* Ocean Blue */
-        --accent: #ff3366; /* Warning Red (unchanged) */
-
-        --text-main: #e0f7ff;
-        --text-muted: #7a9ab8;
-
-        /* Effects */
-        --blur: blur(20px);
-        --ease: cubic-bezier(0.23, 1, 0.32, 1);
+        --bg: #0f172a;
+        --panel: #111827;
+        --card: #1f2937;
+        --accent: #60a5fa;
+        --accent-2: #f59e0b;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --border: #243045;
+        --error: #f87171;
+        --success: #34d399;
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       }
-
       * {
         box-sizing: border-box;
       }
-
       body {
         margin: 0;
-        font-family: "Rajdhani", "Zen Kaku Gothic New", sans-serif;
-        background-color: var(--bg-deep);
-        /* 深海のグラデーション背景 */
-        background-image: radial-gradient(
-          circle at 50% 0%,
-          #091f3a 0%,
-          var(--bg-deep) 60%
-        );
-        color: var(--text-main);
+        font-family: "Inter", "Noto Sans JP", system-ui, -apple-system,
+          sans-serif;
+        background: radial-gradient(
+            120% 120% at 10% 10%,
+            rgba(96, 165, 250, 0.1),
+            transparent 40%
+          ),
+          radial-gradient(
+            120% 120% at 90% 10%,
+            rgba(245, 158, 11, 0.14),
+            transparent 45%
+          ),
+          var(--bg);
+        color: var(--text);
         min-height: 100vh;
         display: flex;
         justify-content: center;
-        padding: 40px 20px;
-        overflow-x: hidden;
-        position: relative;
+        padding: 24px;
       }
-
-      /* --- Deep Sea Bubbles Animation --- */
-      .bubbles-container {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: -1;
-        pointer-events: none;
-      }
-
-      .bubble-bg {
-        position: absolute;
-        bottom: -100px;
-        background: radial-gradient(
-          circle at 30% 30%,
-          rgba(255, 255, 255, 0.2),
-          rgba(0, 255, 234, 0.1) 60%
-        );
-        border-radius: 50%;
-        box-shadow: inset 0 0 10px rgba(0, 255, 234, 0.3);
-        animation: rise var(--rise-time) var(--rise-ease) infinite;
-        opacity: 0.6;
-      }
-
-      @keyframes rise {
-        0% {
-          transform: translateY(0) translateX(0) scale(1);
-          opacity: 0;
-        }
-        10% {
-          opacity: var(--bubble-opacity);
-        }
-        50% {
-          transform: translateY(calc(var(--rise-height) * -0.5))
-            translateX(var(--sway-amount));
-        }
-        100% {
-          transform: translateY(calc(var(--rise-height) * -1))
-            translateX(calc(var(--sway-amount) * -1)) scale(1.2);
-          opacity: 0;
-        }
-      }
-
-      /* Ambient light sources */
-      body::before,
-      body::after {
-        content: "";
-        position: fixed;
-        width: 60vw;
-        height: 60vw;
-        border-radius: 50%;
-        filter: blur(120px);
-        z-index: -2;
-        opacity: 0.3;
-        animation: pulseLight 15s infinite alternate ease-in-out;
-      }
-      body::before {
-        background: radial-gradient(circle, var(--secondary), transparent 60%);
-        bottom: -20%;
-        left: -20%;
-      }
-      body::after {
-        background: radial-gradient(circle, var(--primary), transparent 60%);
-        top: -20%;
-        right: -20%;
-        animation-delay: -7s;
-      }
-      @keyframes pulseLight {
-        0% {
-          opacity: 0.2;
-          transform: scale(1);
-        }
-        100% {
-          opacity: 0.4;
-          transform: scale(1.1);
-        }
-      }
-
-      /* Scrollbar styling */
-      ::-webkit-scrollbar {
-        width: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.2);
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(0, 255, 234, 0.3);
-        border-radius: 3px;
-      }
-
-      /* Main Shell */
       .shell {
-        width: min(1400px, 100%);
-        background: var(--glass-bg);
-        border: 1px solid var(--glass-border);
-        border-top: 1px solid rgba(0, 255, 234, 0.3); /* Top highlight */
-        border-radius: 24px;
-        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6),
-          inset 0 0 20px rgba(0, 255, 234, 0.05);
-        backdrop-filter: var(--blur);
-        -webkit-backdrop-filter: var(--blur);
+        width: min(1200px, 100%);
+        background: linear-gradient(
+          145deg,
+          rgba(31, 41, 55, 0.95),
+          rgba(17, 24, 39, 0.92)
+        );
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
         overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        position: relative;
+        backdrop-filter: blur(8px);
       }
-
-      /* Subtle water caustics overlay effect */
-      .shell::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZmlsdGVyIGlkPSJhIj48ZmUVdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii4wMDUiIG51bW9jdGF2ZXM9IjIiIHJlc3VsdD0iYiIvPjxmZURpc3BsYWNlbWVudE1hcCBpbj0iU291cmNlR3JhcGhpYyIgaW4yPSJiIiBzY2FsZT0iMjAiLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjYSkiIG9wYWNpdHk9IjAuMDMiLz48L3N2Zz4=");
-        opacity: 0.15;
-        mix-blend-mode: overlay;
-        pointer-events: none;
-        z-index: 1;
-      }
-      .shell > * {
-        position: relative;
-        z-index: 2;
-      } /* Ensure content is above caustics */
-
       header {
-        padding: 20px 30px;
-        border-bottom: 1px solid var(--glass-border);
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        background: rgba(0, 10, 20, 0.3);
+        gap: 12px;
+        background: linear-gradient(
+          120deg,
+          rgba(96, 165, 250, 0.14),
+          rgba(96, 165, 250, 0)
+        );
       }
-
       header h1 {
         margin: 0;
-        font-family: "Orbitron", sans-serif;
-        font-size: 24px;
-        font-weight: 700;
-        letter-spacing: 3px;
-        /* Bioluminescent text effect */
-        color: var(--primary);
-        text-shadow: 0 0 15px rgba(0, 255, 234, 0.6);
+        font-size: 18px;
+        letter-spacing: 0.3px;
       }
-
       .badge {
-        padding: 6px 16px;
-        border: 1px solid var(--glass-border);
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 1px;
-        text-transform: uppercase;
-        background: rgba(0, 0, 0, 0.4);
-        color: var(--text-muted);
-        box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
-        transition: 0.3s;
+        padding: 4px 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-size: 12px;
+        color: var(--muted);
       }
-
       .grid {
         display: grid;
-        grid-template-columns: 380px 1fr;
-        grid-template-rows: auto 1fr;
-        gap: 24px;
-        padding: 30px;
-
-        /* 🔽 固定に近い高さをやめる */
-        height: auto;
-        min-height: 0;
+        grid-template-columns: 360px 1fr;
+        gap: 16px;
+        padding: 16px;
       }
-
-      @media (max-width: 1024px) {
+      @media (max-width: 960px) {
         .grid {
           grid-template-columns: 1fr;
-          height: auto;
         }
         body {
-          padding: 10px;
+          padding: 12px;
         }
       }
-
       .card {
-        background: rgba(
-          20,
-          40,
-          60,
-          0.15
-        ); /* Slightly more opaque for deep sea feel */
-        border: 1px solid var(--glass-border);
-        border-radius: 16px;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        transition: all 0.3s var(--ease);
-        position: relative;
-        overflow: hidden;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: var(--shadow);
       }
-
-      .card:hover {
-        border-color: rgba(0, 255, 234, 0.3);
-        background: rgba(20, 40, 60, 0.25);
-        box-shadow: 0 0 30px rgba(0, 255, 234, 0.1);
-      }
-
-      /* Specific Card Layouts */
-      .card:nth-child(1) {
-        grid-row: 1;
-      }
-      .card:nth-child(2) {
-        grid-column: 2;
-        grid-row: 1 / span 3;
-      }
-      .card:nth-child(3) {
-        grid-row: 2;
-      }
-      .card:nth-child(4) {
-        display: none;
-      }
-      .card:nth-child(5) {
-        grid-row: 3;
-      }
-
       .card h2 {
-        margin: 0 0 16px;
-        font-family: "Orbitron", sans-serif;
-        font-size: 14px;
-        letter-spacing: 1.5px;
-        color: var(--primary);
-        text-transform: uppercase;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        text-shadow: 0 0 8px rgba(0, 255, 234, 0.4);
+        margin: 0 0 10px;
+        font-size: 15px;
+        letter-spacing: 0.2px;
+        color: var(--muted);
       }
-
       label {
         display: block;
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--text-muted);
-        margin-bottom: 8px;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
       }
-
       input,
       select,
       textarea {
         width: 100%;
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        background: rgba(0, 15, 30, 0.6);
-        color: var(--text-main);
-        padding: 12px 16px;
-        font-family: "Rajdhani", sans-serif;
-        font-size: 15px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #0d1526;
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 14px;
         outline: none;
-        transition: 0.3s var(--ease);
-      }
-      input:focus,
-      textarea:focus {
-        border-color: var(--primary);
-        box-shadow: 0 0 15px rgba(0, 255, 234, 0.2);
-        background: rgba(0, 20, 40, 0.7);
       }
       textarea {
-        resize: none;
-        min-height: 80px;
-        line-height: 1.6;
+        resize: vertical;
+        min-height: 110px;
       }
-
       button {
-        background: rgba(0, 255, 234, 0.1);
-        border: 1px solid var(--primary);
-        color: var(--primary);
-        font-family: "Orbitron", sans-serif;
+        background: linear-gradient(120deg, var(--accent), #3b82f6);
+        border: none;
+        color: #0b1220;
         font-weight: 700;
-        font-size: 12px;
-        padding: 12px 20px;
-        border-radius: 8px;
+        padding: 10px 12px;
+        border-radius: 12px;
         cursor: pointer;
         width: 100%;
-        transition: all 0.3s var(--ease);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        position: relative;
-        overflow: hidden;
-        text-shadow: 0 0 5px rgba(0, 255, 234, 0.4);
-      }
-      button:hover {
-        background: var(--primary);
-        color: #002233;
-        box-shadow: 0 0 25px var(--primary);
-        transform: translateY(-2px);
+        transition: transform 0.08s ease, filter 0.1s ease;
+        font-size: 14px;
       }
       button.secondary {
-        background: transparent;
-        border-color: var(--glass-border);
-        color: var(--text-muted);
-        text-shadow: none;
+        background: #111827;
+        color: var(--text);
+        border: 1px solid var(--border);
+        font-weight: 600;
       }
-      button.secondary:hover {
-        border-color: var(--text-main);
-        color: var(--text-main);
-        background: rgba(255, 255, 255, 0.05);
-        box-shadow: none;
+      button:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.05);
       }
-
       .row {
         display: flex;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: 10px;
       }
       .row > * {
         flex: 1;
       }
-
       .status {
-        margin-top: 10px;
-        font-size: 12px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: #0b1220;
+        border: 1px solid var(--border);
+        font-size: 13px;
+        color: var(--muted);
         min-height: 20px;
-        color: var(--text-muted);
-        transition: 0.3s;
+        white-space: pre-line;
       }
       .status.error {
-        color: var(--accent);
-        text-shadow: 0 0 10px rgba(255, 51, 102, 0.4);
+        color: var(--error);
       }
       .status.ok {
-        color: #00ff9d;
-        text-shadow: 0 0 10px rgba(0, 255, 157, 0.4);
+        color: var(--success);
       }
-
-      .pill-toggle {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4px;
-        background: rgba(0, 10, 25, 0.5);
-        border-radius: 10px;
-        padding: 4px;
-        margin-bottom: 20px;
-        border: 1px solid var(--glass-border);
-      }
-      .pill-toggle button {
-        background: transparent;
-        border: none;
-        color: var(--text-muted);
-        font-family: "Rajdhani", sans-serif;
-        font-size: 14px;
-        padding: 8px;
-        border-radius: 6px;
-        text-shadow: none;
-        box-shadow: none;
-      }
-      .pill-toggle button.active {
-        background: rgba(0, 255, 234, 0.15);
-        color: var(--primary);
-        border: 1px solid var(--primary);
-        box-shadow: 0 0 10px rgba(0, 255, 234, 0.2);
-        text-shadow: 0 0 5px rgba(0, 255, 234, 0.5);
-      }
-      .pill-toggle button:hover {
-        transform: none;
-      }
-
       .messages {
-        flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 12px;
+        max-height: 520px;
         overflow-y: auto;
-        padding: 10px 4px;
-        margin-bottom: 20px;
-        border-top: 1px solid var(--glass-border);
-        border-bottom: 1px solid var(--glass-border);
-        background: rgba(0, 10, 25, 0.3);
-        border-radius: 8px;
-        scroll-behavior: smooth;
       }
-
       .bubble {
-        max-width: 85%;
-        padding: 16px;
+        padding: 12px 14px;
         border-radius: 12px;
-        line-height: 1.6;
-        font-size: 15px;
-        position: relative;
-        animation: slideIn 0.3s var(--ease);
-        backdrop-filter: blur(5px);
+        border: 1px solid var(--border);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
       }
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateY(15px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
       .bubble.user {
-        align-self: flex-end;
-        background: rgba(0, 255, 234, 0.07);
-        border: 1px solid rgba(0, 255, 234, 0.3);
-        color: var(--primary);
-        border-bottom-right-radius: 2px;
+        background: #0d1526;
       }
-
       .bubble.assistant {
-        align-self: flex-start;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid var(--glass-border);
-        color: var(--text-main);
-        border-bottom-left-radius: 2px;
+        background: #0b1220;
       }
-
-      .bubble div:first-child {
-        font-size: 10px;
-        letter-spacing: 1px;
-        margin-bottom: 6px;
-        opacity: 0.7;
-        font-family: "Orbitron", sans-serif;
-      }
-
       .sources {
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px dashed var(--glass-border);
         font-size: 12px;
-        color: var(--text-muted);
-        font-family: monospace;
+        color: var(--muted);
+        margin-top: 6px;
       }
-
+      .pill-toggle {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        background: #0d1526;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 8px;
+      }
+      .pill-toggle button {
+        width: 100%;
+        padding: 8px;
+        border-radius: 10px;
+        border: none;
+        background: transparent;
+        color: var(--text);
+        font-weight: 600;
+      }
+      .pill-toggle button.active {
+        background: linear-gradient(120deg, var(--accent-2), #fbbf24);
+        color: #0d0f1a;
+      }
       .list {
-        background: rgba(0, 10, 25, 0.4);
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        padding: 0;
-        max-height: 200px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #0d1526;
+        padding: 10px;
+        max-height: 320px;
         overflow-y: auto;
+        font-size: 13px;
       }
       .list-item {
-        padding: 12px;
-        border-bottom: 1px solid var(--glass-border);
-        font-size: 13px;
-        transition: 0.2s;
-        cursor: default;
-      }
-      .list-item:hover {
-        background: rgba(0, 255, 234, 0.05);
+        padding: 10px;
+        border-bottom: 1px solid var(--border);
+        white-space: pre-wrap;
       }
       .list-item:last-child {
         border-bottom: none;
       }
-      .list-item strong {
-        color: var(--primary);
-      }
-
-      @media (max-width: 768px) {
-        .shell {
-          border-radius: 0;
-          border: none;
-          background: transparent;
-          box-shadow: none;
-        }
-        .shell::after {
-          display: none;
-        }
-      }
     </style>
   </head>
   <body>
-    <div class="bubbles-container" id="bubbles-container"></div>
-
     <div class="shell">
       <header>
-        <h1>
-          ABYSSAL NEXUS
-          <span style="font-size: 0.5em; opacity: 0.6; font-weight: 300"
-            >// DEEP DIVE v3.0</span
-          >
-        </h1>
-        <span class="badge" id="auth-badge">UNAUTHORIZED</span>
+        <h1>LLM Chat Console</h1>
+        <span class="badge" id="auth-badge">未ログイン</span>
       </header>
 
       <div class="grid">
         <div class="card">
-          <h2>01 // BIOMETRIC AUTH</h2>
-          <label>API Uplink</label>
+          <h2>認証</h2>
+          <label>API ベース URL</label>
           <input id="base-url" value="http://sawachi2:8080" />
-          <div class="row" style="margin-top: 12px">
+          <div class="row">
             <div>
-              <label>Operative ID</label>
+              <label>ユーザー名</label>
+              <!-- value に admin を入れておく -->
               <input id="username" value="admin" placeholder="admin" />
             </div>
             <div>
-              <label>Security Code</label>
+              <label>パスワード</label>
+              <!-- value に password123 を入れておく -->
               <input
                 id="password"
                 type="password"
@@ -561,184 +270,83 @@
               />
             </div>
           </div>
-          <div class="row" style="margin-top: 16px">
-            <button onclick="login()">ESTABLISH LINK</button>
-            <button class="secondary" onclick="registerUser()">
-              NEW OPERATIVE
-            </button>
+          <div class="row">
+            <button onclick="login()">ログイン</button>
+            <button class="secondary" onclick="registerUser()">登録</button>
           </div>
           <div class="status" id="auth-status"></div>
         </div>
 
-        <div class="card" style="display: flex; flex-direction: column">
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 10px;
-            "
-          >
-            <h2>02 // NEURAL INTERFACE</h2>
-            <div
-              style="
-                font-size: 10px;
-                color: var(--primary);
-                font-family: monospace;
-                opacity: 0.7;
-              "
-            >
-              SYS.ONLINE // DEPTH: 8,000M
-            </div>
-          </div>
-
+        <div class="card">
+          <h2>チャット</h2>
           <div class="pill-toggle">
             <button id="tab-chat" class="active" onclick="setMode('chat')">
-              DIRECT COMMS
+              通常チャット
             </button>
-            <button id="tab-rag" onclick="setMode('rag')">
-              KNOWLEDGE BASE
-            </button>
+            <button id="tab-rag" onclick="setMode('rag')">RAG</button>
+            <button id="tab-sql" onclick="setMode('sql')">SQL</button>
+            <button id="tab-agent" onclick="setMode('agent')">Agent SQL</button>
           </div>
-
           <div class="row">
-            <div style="flex: 1">
-              <label>Session ID</label>
-              <input
-                id="session-id"
-                placeholder="demo-session"
-                style="font-family: monospace"
-              />
+            <div>
+              <label>セッションID</label>
+              <input id="session-id" placeholder="demo" />
             </div>
-            <div style="flex: 2">
-              <label>Quantum Token</label>
-              <input
-                id="token"
-                placeholder="Awaiting authentication..."
-                readonly
-                style="color: var(--text-muted)"
-              />
+            <div>
+              <label>トークン</label>
+              <input id="token" placeholder="(ログイン後自動セット)" />
             </div>
           </div>
-
-          <div class="messages" id="messages">
-            <div
-              style="
-                text-align: center;
-                padding: 40px;
-                color: var(--glass-border);
-                font-size: 12px;
-                letter-spacing: 1px;
-              "
-            >
-              AWAITING INPUT SIGNAL...
-            </div>
-          </div>
-
-          <div style="margin-top: auto">
-            <label
-              id="prompt-label"
-              style="display: flex; justify-content: space-between"
-            >
-              <span>Command Directive</span>
-              <span style="opacity: 0.5; font-size: 9px">MD SUPPORTED</span>
-            </label>
-            <div style="position: relative">
-              <textarea
-                id="message"
-                placeholder="Enter directive or target data stream URL..."
-              ></textarea>
-              <div
-                style="
-                  position: absolute;
-                  bottom: 12px;
-                  right: 12px;
-                  width: 110px;
-                "
-              >
-                <button
-                  onclick="sendMessage()"
-                  style="padding: 8px; font-size: 11px"
-                >
-                  TRANSMIT
-                </button>
+          <div id="sql-opts" style="display: none; margin-bottom: 8px;">
+            <div class="row">
+              <div>
+                <label>max_history (/sql/chat 任意)</label>
+                <input id="sql-max-history" type="number" min="1" max="500" placeholder="50" />
               </div>
             </div>
-            <div
-              class="status"
-              id="chat-status"
-              style="margin-top: 4px; text-align: right"
-            ></div>
           </div>
-        </div>
-
-        <div class="card">
-          <h2>03 // DATA ARCHIVES</h2>
-          <label>Search Query</label>
-          <input id="history-q" placeholder="Keywords..." />
-          <div class="row" style="margin-top: 10px">
-            <input id="history-session" placeholder="Target Session ID" />
-            <button onclick="searchHistory()" style="width: 80px">SCAN</button>
-          </div>
-          <div class="list" id="history-list" style="margin-top: 12px"></div>
-        </div>
-
-        <div class="card"></div>
-
-        <div class="card">
-          <h2>04 // CREW MANIFEST</h2>
-          <button
-            class="secondary"
-            onclick="loadUsers()"
-            style="margin-bottom: 12px"
+          <div
+            id="agent-note"
+            class="status error"
+            style="display: none; margin-bottom: 8px;"
           >
-            UPDATE MANIFEST
-          </button>
+            Agent SQL は破壊的 SQL も実行します。ローカル検証専用。
+          </div>
+          <label id="prompt-label"
+            >メッセージ（URLのみ→要約 / URL+質問 or テキスト→LLM応答）</label
+          >
+          <textarea
+            id="message"
+            placeholder="https://example.com\n\nこのページを要約して"
+          ></textarea>
+          <button onclick="sendMessage()">送信</button>
+          <div class="status" id="chat-status"></div>
+        </div>
+
+        <div class="card">
+          <h2>履歴検索</h2>
+          <label>キーワード</label>
+          <input id="history-q" placeholder="例: セキュリティ" />
+          <label>セッションID（任意）</label>
+          <input id="history-session" placeholder="demo" />
+          <button onclick="searchHistory()">検索</button>
+          <div class="list" id="history-list"></div>
+        </div>
+
+        <div class="card">
+          <h2>レスポンス</h2>
+          <div class="messages" id="messages"></div>
+        </div>
+
+        <div class="card">
+          <h2>管理者: ユーザー一覧</h2>
+          <button class="secondary" onclick="loadUsers()">取得</button>
           <div class="list" id="users-list"></div>
         </div>
       </div>
     </div>
 
     <script>
-      // --- Bubble Generation Script ---
-      function createBubbles() {
-        const container = document.getElementById("bubbles-container");
-        const bubbleCount = 30; // 泡の数
-
-        for (let i = 0; i < bubbleCount; i++) {
-          const bubble = document.createElement("div");
-          bubble.className = "bubble-bg";
-
-          // ランダムなパラメータを生成
-          const size = Math.random() * 60 + 10; // 10px ~ 70px
-          const left = Math.random() * 100; // 0% ~ 100%
-          const duration = Math.random() * 10 + 15; // 15s ~ 25s (ゆっくり)
-          const delay = Math.random() * -20; // 開始時間をずらす
-          const opacity = Math.random() * 0.4 + 0.1; // 透明度
-          const sway = (Math.random() - 0.5) * 100; // 左右の揺れ幅
-          const height = window.innerHeight + 200; // 上昇する高さ
-
-          // CSSカスタムプロパティにセット
-          bubble.style.width = `${size}px`;
-          bubble.style.height = `${size}px`;
-          bubble.style.left = `${left}%`;
-          bubble.style.setProperty("--rise-time", `${duration}s`);
-          bubble.style.setProperty("--bubble-opacity", opacity);
-          bubble.style.setProperty("--sway-amount", `${sway}px`);
-          bubble.style.setProperty("--rise-height", `${height}px`);
-          bubble.style.setProperty(
-            "--rise-ease",
-            Math.random() > 0.5 ? "ease-in-out" : "linear"
-          );
-          bubble.style.animationDelay = `${delay}s`;
-
-          container.appendChild(bubble);
-        }
-      }
-      // Initialize bubbles on load
-      createBubbles();
-
-      // --- Existing App Logic ---
       let mode = "chat";
       const el = (id) => document.getElementById(id);
 
@@ -754,31 +362,41 @@
         mode = next;
         el("tab-chat").classList.toggle("active", mode === "chat");
         el("tab-rag").classList.toggle("active", mode === "rag");
-        el("prompt-label").querySelector("span").textContent =
-          mode === "chat"
-            ? "Command Directive (URL Summary or Chat)"
-            : "RAG Query (Vector Database Search)";
+        el("tab-sql").classList.toggle("active", mode === "sql");
+        el("tab-agent").classList.toggle("active", mode === "agent");
+
+        // 共通プレースホルダとオプション切替
+        const prompt = el("prompt-label");
+        const textarea = el("message");
+        const sqlOpts = el("sql-opts");
+        const agentNote = el("agent-note");
+        sqlOpts.style.display = mode === "sql" ? "block" : "none";
+        agentNote.style.display = mode === "agent" ? "block" : "none";
+
+        if (mode === "chat") {
+          prompt.textContent =
+            "メッセージ（URLのみ→要約 / URL+質問 or テキスト→LLM応答）";
+          textarea.placeholder = "https://example.com\n\nこのページを要約して";
+        } else if (mode === "rag") {
+          prompt.textContent = "質問（RAG: ベクトルDB/BM25で検索して回答）";
+          textarea.placeholder = "RAG で質問する内容を書いてください";
+        } else if (mode === "sql") {
+          prompt.textContent = "/sql/chat: 履歴要約などを依頼できます";
+          textarea.placeholder = "先週の会話を要約して";
+        } else {
+          prompt.textContent =
+            "/agent/sql/chat: 破壊的 SQL も実行します（ローカル専用）";
+          textarea.placeholder = "conversations テーブルの中身を全部見せて";
+        }
       }
 
       function saveToken(token) {
         el("token").value = token || "";
-        const badge = el("auth-badge");
-        if (token) {
-          badge.textContent = "AUTHORIZED";
-          badge.style.borderColor = "var(--primary)";
-          badge.style.color = "var(--primary)";
-          badge.style.boxShadow = "0 0 15px rgba(0,255,234,0.4)";
-          badge.style.background = "rgba(0,255,234,0.1)";
-        } else {
-          badge.textContent = "UNAUTHORIZED";
-          badge.style.borderColor = "var(--glass-border)";
-          badge.style.color = "var(--text-muted)";
-          badge.style.boxShadow = "none";
-          badge.style.background = "rgba(0,0,0,0.4)";
-        }
+        el("auth-badge").textContent = token ? "ログイン済" : "未ログイン";
       }
 
       async function api(path, options = {}) {
+        // 入力が空なら現在表示中のオリジン(origin: 今のURLのスキーム＋ホスト＋ポート)を使う
         const baseInput = el("base-url").value.trim();
         const base = (baseInput || window.location.origin).replace(/\/$/, "");
 
@@ -799,7 +417,7 @@
       }
 
       async function login() {
-        setStatus("auth-status", "Initiating Handshake...");
+        setStatus("auth-status", "ログイン中...");
         try {
           const data = await api("/login", {
             method: "POST",
@@ -809,14 +427,14 @@
             }),
           });
           saveToken(data.access_token);
-          setStatus("auth-status", "Uplink Established", true);
+          setStatus("auth-status", "ログイン成功", true);
         } catch (e) {
           setStatus("auth-status", e.message, false, true);
         }
       }
 
       async function registerUser() {
-        setStatus("auth-status", "Processing New ID...");
+        setStatus("auth-status", "登録中...");
         try {
           await api("/register", {
             method: "POST",
@@ -825,7 +443,11 @@
               password: el("password").value,
             }),
           });
-          setStatus("auth-status", "ID Created. Awaiting Initial Login.", true);
+          setStatus(
+            "auth-status",
+            "登録完了。続けてログインしてください",
+            true
+          );
         } catch (e) {
           setStatus("auth-status", e.message, false, true);
         }
@@ -836,8 +458,9 @@
         wrap.className = "bubble " + role;
 
         const header = document.createElement("div");
-        header.textContent =
-          role === "user" ? "SOURCE // OPERATIVE" : "SOURCE // NEXUS AI";
+        header.style.fontSize = "12px";
+        header.style.color = "var(--muted)";
+        header.textContent = role.toUpperCase();
         wrap.appendChild(header);
 
         const body = document.createElement("div");
@@ -848,49 +471,83 @@
           const src = document.createElement("div");
           src.className = "sources";
           src.textContent =
-            ">> DATA STREAMS: " +
-            sources.map((s) => `${s.source}`).join(" // ");
+            "Sources: " +
+            sources.map((s) => `${s.source} (${s.snippet})`).join(" / ");
           wrap.appendChild(src);
         }
 
         const container = el("messages");
-        if (container.innerText.includes("AWAITING INPUT SIGNAL")) {
-          container.innerHTML = "";
-        }
+
+        // 🔽 ここがポイント：下ではなく「一番上」に追加する
         if (container.firstChild) {
-          container.insertBefore(wrap, container.firstChild);
+          container.insertBefore(wrap, container.firstChild); // firstChild(最初の子要素)
         } else {
-          container.appendChild(wrap);
+          container.appendChild(wrap); // 最初の1件だけは普通に追加
         }
+
+        // いつも一番上が見えるように
         container.scrollTop = 0;
       }
 
       async function sendMessage() {
         const message = el("message").value.trim();
         if (!message) return;
-        const sessionId = el("session-id").value.trim() || "demo";
-        const path = mode === "chat" ? "/chat" : "/rag/chat";
-        const payload =
-          mode === "chat"
-            ? { message, session_id: sessionId }
-            : { question: message, session_id: sessionId };
+        const sessionId = el("session-id").value.trim() || "default";
+        let path = "/chat";
+        let payload = {};
 
-        setStatus("chat-status", "Transmitting Data...");
+        if (mode === "chat") {
+          path = "/chat";
+          payload = { message, session_id: sessionId };
+        } else if (mode === "rag") {
+          path = "/rag/chat";
+          payload = { question: message, session_id: sessionId };
+        } else if (mode === "sql") {
+          path = "/sql/chat";
+          payload = { message };
+          if (sessionId) payload.session_id = sessionId;
+          const maxHistoryRaw = el("sql-max-history").value.trim();
+          if (maxHistoryRaw) payload.max_history = Number(maxHistoryRaw);
+        } else {
+          path = "/agent/sql/chat";
+          payload = { message };
+        }
+
+        setStatus("chat-status", "送信中...");
         appendMessage("user", message);
-        el("message").value = "";
-
         try {
           const data = await api(path, {
             method: "POST",
             body: JSON.stringify(payload),
           });
+
           if (mode === "chat") {
             appendMessage("assistant", data.reply || "");
-            setStatus("chat-status", "Ack.", true);
-          } else {
+            setStatus("chat-status", "OK", true);
+          } else if (mode === "rag") {
             appendMessage("assistant", data.answer || "", data.sources || []);
-            setStatus("chat-status", "Ack (RAG).", true);
+            setStatus("chat-status", "OK (RAG)", true);
+          } else if (mode === "sql") {
+            const used = JSON.stringify(data.used_tools || [], null, 2);
+            appendMessage(
+              "assistant",
+              `reply:\n${data.reply || ""}\n\nused_tools:\n${used}`
+            );
+            setStatus("chat-status", "OK (/sql/chat)", true);
+          } else {
+            const parts = [
+              `reply:\n${data.reply || ""}`,
+              `sql_query:\n${data.sql_query || ""}`,
+              `sql_raw_result:\n${data.sql_raw_result || ""}`,
+              data.note ? `note:\n${data.note}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n");
+            appendMessage("assistant", parts);
+            setStatus("chat-status", "OK (/agent/sql/chat)", true);
           }
+
+          el("message").value = "";
         } catch (e) {
           setStatus("chat-status", e.message, false, true);
         }
@@ -898,28 +555,26 @@
 
       async function searchHistory() {
         const q = el("history-q").value.trim();
-        if (!q) return;
-        const params = new URLSearchParams({ q });
+        const params = new URLSearchParams();
+        if (q) params.append("q", q);
         const sessionId = el("history-session").value.trim();
         if (sessionId) params.append("session_id", sessionId);
-        setStatus("chat-status", "Scanning Archives...");
+        setStatus("chat-status", "履歴検索中...");
         try {
-          const data = await api("/history/search?" + params.toString());
+          const queryString = params.toString();
+          const path = queryString
+            ? "/history/search?" + queryString
+            : "/history/search";
+          const data = await api(path);
           const list = el("history-list");
           list.innerHTML = "";
-          if (data.length === 0) {
-            list.innerHTML =
-              "<div style='padding:10px; color:var(--text-muted)'>No matching records.</div>";
-          }
           data.forEach((item) => {
             const div = document.createElement("div");
             div.className = "list-item";
-            div.innerHTML = `<strong>${item.role.toUpperCase()}</strong> <span style='opacity:0.5; font-size:11px;'>[ID:${
-              item.session_id
-            }]</span><br>${item.content.substring(0, 60)}...`;
+            div.innerHTML = `<strong>${item.role}</strong> [${item.session_id}]<br>${item.content}`;
             list.appendChild(div);
           });
-          setStatus("chat-status", "Scan Complete", true);
+          setStatus("chat-status", "履歴取得成功", true);
         } catch (e) {
           setStatus("chat-status", e.message, false, true);
         }
@@ -933,21 +588,36 @@
           data.forEach((u) => {
             const div = document.createElement("div");
             div.className = "list-item";
-            div.innerHTML = `<span style='color:var(--primary)'>OP:${u.id}</span> ${u.username} <span style='font-size:10px; border:1px solid var(--glass-border); padding:1px 4px; border-radius:4px;'>${u.role}</span>`;
+            div.textContent = `${u.id}: ${u.username} (${u.role})`;
             list.appendChild(div);
           });
-          setStatus("chat-status", "Manifest Updated", true);
+          setStatus(
+            "chat-status",
+            "ユーザー取得成功 (admin token が必要です)",
+            true
+          );
         } catch (e) {
           setStatus("chat-status", e.message, false, true);
         }
       }
+      /* ... 既存の JS ... */
 
+      // ---- ここから追加 ----
       el("message").addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           sendMessage();
         }
       });
+      ["history-q", "history-session"].forEach((id) => {
+        el(id).addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            searchHistory();
+          }
+        });
+      });
+      // ---- ここまで追加 ----
     </script>
   </body>
 </html>
