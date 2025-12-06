@@ -11,9 +11,12 @@ from pydantic import BaseModel, Field
 
 from src.auth import get_current_user
 from src.config import ENABLE_SHELL_EXEC
+from src.database import get_db
+from src.models import AdminShellCommand
 from src.utils import llm_backend
 from src.utils.llm_json import strip_think_blocks
 from src.utils.shell_exec import run_shell_command
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger("llm_api")
 router = APIRouter(prefix="/agent/admin_shell", tags=["agent-admin-shell"])
@@ -85,6 +88,7 @@ def _extract_single_command(text: str) -> str:
 async def admin_shell_agent_exec(
     payload: AdminShellAgentRequest,
     user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Admin-only agent:
@@ -111,7 +115,7 @@ async def admin_shell_agent_exec(
         )
 
     if payload.dry_run:
-        return AdminShellAgentResponse(
+        response = AdminShellAgentResponse(
             instruction=payload.instruction,
             command=command,
             stdout="",
@@ -119,10 +123,22 @@ async def admin_shell_agent_exec(
             exit_code=0,
             dry_run=True,
         )
+        db.add(
+            AdminShellCommand(
+                user_id=user.username,
+                instruction=payload.instruction,
+                command=command,
+                stdout="",
+                stderr="DRY RUN: command not executed.",
+                exit_code=0,
+            )
+        )
+        db.commit()
+        return response
 
     result = run_shell_command(command, timeout=30)
 
-    return AdminShellAgentResponse(
+    response = AdminShellAgentResponse(
         instruction=payload.instruction,
         command=command,
         stdout=result["stdout"],
@@ -130,3 +146,17 @@ async def admin_shell_agent_exec(
         exit_code=result["exit_code"],
         dry_run=False,
     )
+
+    db.add(
+        AdminShellCommand(
+            user_id=user.username,
+            instruction=payload.instruction,
+            command=command,
+            stdout=result["stdout"][:2000],
+            stderr=result["stderr"][:2000],
+            exit_code=result["exit_code"],
+        )
+    )
+    db.commit()
+
+    return response

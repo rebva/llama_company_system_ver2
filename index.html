@@ -239,6 +239,12 @@
       .list-item:last-child {
         border-bottom: none;
       }
+      .mono {
+        font-family: "SFMono-Regular", "Consolas", "Menlo", monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 13px;
+      }
     </style>
   </head>
   <body>
@@ -286,6 +292,10 @@
             <button id="tab-rag" onclick="setMode('rag')">RAG</button>
             <button id="tab-sql" onclick="setMode('sql')">SQL</button>
             <button id="tab-agent" onclick="setMode('agent')">Agent SQL</button>
+            <button id="tab-shell" onclick="setMode('shell')">Shell</button>
+            <button id="tab-shell-admin" onclick="setMode('shellAdmin')">
+              Admin Shell
+            </button>
           </div>
           <div class="row">
             <div>
@@ -312,6 +322,20 @@
           >
             Agent SQL は破壊的 SQL も実行します。ローカル検証専用。
           </div>
+          <div
+            id="shell-note"
+            class="status"
+            style="display: none; margin-bottom: 8px;"
+          >
+            Shell は安全アクションのみ実行します (list_dir/show_file/tail_file/disk_usage)。
+          </div>
+          <div
+            id="shell-admin-note"
+            class="status error"
+            style="display: none; margin-bottom: 8px;"
+          >
+            Admin Shell は生コマンドを LLM が生成して実行します。ローカル専用、dry run 推奨。
+          </div>
           <label id="prompt-label"
             >メッセージ（URLのみ→要約 / URL+質問 or テキスト→LLM応答）</label
           >
@@ -319,6 +343,11 @@
             id="message"
             placeholder="https://example.com\n\nこのページを要約して"
           ></textarea>
+          <div id="shell-admin-opts" class="row" style="display: none;">
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="shell-dry-run" />Dry Run (コマンドのみ)
+            </label>
+          </div>
           <button onclick="sendMessage()">送信</button>
           <div class="status" id="chat-status"></div>
         </div>
@@ -336,6 +365,17 @@
         <div class="card">
           <h2>レスポンス</h2>
           <div class="messages" id="messages"></div>
+        </div>
+
+        <div class="card" id="shell-result-card" style="display: none;">
+          <h2>Shell 実行結果</h2>
+          <div class="status" id="shell-command" style="margin-bottom: 8px;"></div>
+          <label>stdout</label>
+          <div class="status mono" id="shell-stdout"></div>
+          <label>stderr</label>
+          <div class="status mono" id="shell-stderr"></div>
+          <label>exit_code</label>
+          <div class="status" id="shell-exit"></div>
         </div>
 
         <div class="card">
@@ -364,14 +404,25 @@
         el("tab-rag").classList.toggle("active", mode === "rag");
         el("tab-sql").classList.toggle("active", mode === "sql");
         el("tab-agent").classList.toggle("active", mode === "agent");
+        el("tab-shell").classList.toggle("active", mode === "shell");
+        el("tab-shell-admin").classList.toggle("active", mode === "shellAdmin");
 
         // 共通プレースホルダとオプション切替
         const prompt = el("prompt-label");
         const textarea = el("message");
         const sqlOpts = el("sql-opts");
         const agentNote = el("agent-note");
+        const shellNote = el("shell-note");
+        const shellAdminNote = el("shell-admin-note");
+        const shellAdminOpts = el("shell-admin-opts");
+        const shellResultCard = el("shell-result-card");
         sqlOpts.style.display = mode === "sql" ? "block" : "none";
         agentNote.style.display = mode === "agent" ? "block" : "none";
+        shellNote.style.display = mode === "shell" ? "block" : "none";
+        shellAdminNote.style.display = mode === "shellAdmin" ? "block" : "none";
+        shellAdminOpts.style.display = mode === "shellAdmin" ? "flex" : "none";
+        shellResultCard.style.display =
+          mode === "shell" || mode === "shellAdmin" ? "block" : "none";
 
         if (mode === "chat") {
           prompt.textContent =
@@ -383,10 +434,19 @@
         } else if (mode === "sql") {
           prompt.textContent = "/sql/chat: 履歴要約などを依頼できます";
           textarea.placeholder = "先週の会話を要約して";
-        } else {
+        } else if (mode === "agent") {
           prompt.textContent =
             "/agent/sql/chat: 破壊的 SQL も実行します（ローカル専用）";
           textarea.placeholder = "conversations テーブルの中身を全部見せて";
+        } else if (mode === "shell") {
+          prompt.textContent =
+            "/agent/shell/exec: LLM が安全アクションに変換して実行します";
+          textarea.placeholder = "/app の中を見せて";
+        } else {
+          prompt.textContent =
+            "/agent/admin_shell/exec: LLM が生コマンドを生成します (危険)";
+          textarea.placeholder =
+            "test.txt を作って諺を書いて cat して (dry run 推奨)";
         }
       }
 
@@ -508,9 +568,18 @@
           if (sessionId) payload.session_id = sessionId;
           const maxHistoryRaw = el("sql-max-history").value.trim();
           if (maxHistoryRaw) payload.max_history = Number(maxHistoryRaw);
-        } else {
+        } else if (mode === "agent") {
           path = "/agent/sql/chat";
           payload = { message };
+        } else if (mode === "shell") {
+          path = "/agent/shell/exec";
+          payload = { instruction: message };
+        } else {
+          path = "/agent/admin_shell/exec";
+          payload = {
+            instruction: message,
+            dry_run: el("shell-dry-run").checked,
+          };
         }
 
         setStatus("chat-status", "送信中...");
@@ -534,7 +603,7 @@
               `reply:\n${data.reply || ""}\n\nused_tools:\n${used}`
             );
             setStatus("chat-status", "OK (/sql/chat)", true);
-          } else {
+          } else if (mode === "agent") {
             const parts = [
               `reply:\n${data.reply || ""}`,
               `sql_query:\n${data.sql_query || ""}`,
@@ -545,6 +614,25 @@
               .join("\n\n");
             appendMessage("assistant", parts);
             setStatus("chat-status", "OK (/agent/sql/chat)", true);
+          } else {
+            renderShellResult(data);
+            const summary = [
+              `command:\n${data.command || ""}`,
+              `stdout:\n${data.stdout || ""}`,
+              data.stderr ? `stderr:\n${data.stderr}` : "",
+              `exit_code: ${data.exit_code}`,
+              data.dry_run ? "(dry run)" : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n");
+            appendMessage("assistant", summary);
+            setStatus(
+              "chat-status",
+              mode === "shell"
+                ? "OK (/agent/shell/exec)"
+                : "OK (/agent/admin_shell/exec)",
+              true
+            );
           }
 
           el("message").value = "";
@@ -617,6 +705,16 @@
           }
         });
       });
+
+      function renderShellResult(data) {
+        el("shell-command").textContent = data.command || "";
+        el("shell-stdout").textContent = data.stdout || "";
+        el("shell-stderr").textContent = data.stderr || "";
+        el("shell-exit").textContent = String(data.exit_code ?? "");
+      }
+
+      // 初期モード
+      setMode("chat");
       // ---- ここまで追加 ----
     </script>
   </body>

@@ -33,6 +33,19 @@ class Conversation(Base):
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
 
+class AdminShellCommand(Base):
+    __tablename__ = "admin_shell_commands"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    instruction = Column(Text)
+    command = Column(Text)
+    stdout = Column(Text)
+    stderr = Column(Text)
+    exit_code = Column(Integer)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+
 # ===== Pydantic スキーマ =====
 
 class Token(BaseModel):
