@@ -4,15 +4,15 @@ The LLM only decides an allowlisted action; the server builds and runs the comma
 """
 from __future__ import annotations
 
-import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src.auth import get_current_user
 from src.config import ENABLE_SHELL_EXEC
 from src.utils import llm_backend
+from src.utils.llm_json import extract_last_json_object
 from src.utils.shell_exec import (
     build_safe_command,
     run_shell_command,
@@ -41,7 +41,7 @@ class ShellAgentResponse(BaseModel):
 SYSTEM_PROMPT = """
 You are a command planner for a safe shell helper.
 
-You NEVER run commands yourself. You only decide ONE action for the backend.
+You NEVER run commands yourself. You only decide ONE action for the backend and must output exactly one JSON object.
 Allowed actions (case sensitive) are:
 - "list_dir": list directory contents
 - "show_file": show full file content
@@ -61,6 +61,8 @@ Rules:
 - If the user wants to see content of a file -> use "show_file" and set path.
 - If the user wants to see recent logs -> use "tail_file", set path, choose a reasonable lines (e.g. 200).
 - Never add explanations. Output pure JSON only.
+- Do NOT wrap JSON in backticks.
+- Do NOT output <think> tags; think silently if needed.
 """.strip()
 
 
@@ -91,8 +93,8 @@ async def agent_shell_exec(
     llm_text = llm_backend.call_llm_backend(messages)
 
     try:
-        plan = json.loads(llm_text)
-    except json.JSONDecodeError as e:
+        plan = extract_last_json_object(llm_text)
+    except ValueError as e:
         logger.error("LLM returned invalid JSON: %s", llm_text)
         raise HTTPException(
             status_code=500,
