@@ -16,6 +16,7 @@ from src.database import engine, SessionLocal
 from src.models import Base
 from src.routers import (
     admin_router,
+    admin_agent_shell_router,
     agent_sql_router,
     agent_shell_router,
     auth_router,
@@ -74,6 +75,7 @@ app.include_router(sql_safe_router.router)
 app.include_router(agent_sql_router.router)
 app.include_router(shell_router.router)
 app.include_router(agent_shell_router.router)
+app.include_router(admin_agent_shell_router.router)
 
 
 @app.on_event("startup")
