@@ -5,7 +5,6 @@ services:
     ports:
       - "8080:8080"        # ホスト8080 -> コンテナ8080
     environment:
-      - ENABLE_SHELL_EXEC=true
       # ollamaは使用せずにvllmを利用しています。
       - VLLM_BASE_URL=${VLLM_BASE_URL:?VLLM_BASE_URL is not set in .env}
       # 利用するモデル名（事前に対応バックエンドへデプロイ/登録しておく）

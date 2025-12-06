@@ -17,6 +17,7 @@ from src.models import Base
 from src.routers import (
     admin_router,
     agent_sql_router,
+    agent_shell_router,
     auth_router,
     chat_router,
     rag_router,
@@ -72,6 +73,7 @@ app.include_router(rag_router.router)
 app.include_router(sql_safe_router.router)
 app.include_router(agent_sql_router.router)
 app.include_router(shell_router.router)
+app.include_router(agent_shell_router.router)
 
 
 @app.on_event("startup")
