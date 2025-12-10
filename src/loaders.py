@@ -1,58 +1,92 @@
 """
 ドキュメントローダー
-- 各種ファイル形式を読み込み、langchain.schema.Document オブジェクトを返す
-- metadata に source（ファイル名）を設定
+- rag_data/public と rag_data/admin_only を走査して Document を返す
+- 各チャンクにアクセス制御用のメタデータを付与する
 """
-import os  # ファイルやディレクトリ操作用
-from typing import List  # 型ヒント用
-import fitz  # PyMuPDF: PDF操作ライブラリ
-import pandas as pd  # データ解析ライブラリ
-from langchain.schema import Document  # LangChain のドキュメントオブジェクトクラス
-from src.config import DATA_FOLDER  # ドキュメント格納フォルダパス設定
+from pathlib import Path
+from typing import List
 
-def load_pdfs() -> List[Document]:
-    """
-    DATA_FOLDER 配下の .pdf ファイルをすべて読み込み、
-    ページごとにテキスト抽出して Document リストを返す
-    """
-    docs: List[Document] = []  # ドキュメント格納用リスト
-    for fn in os.listdir(DATA_FOLDER):  # フォルダ内のファイルをループ
-        if fn.lower().endswith(".pdf"):  # PDFファイルのみ対象
-            path = os.path.join(DATA_FOLDER, fn)  # フルパスを作成
-            pdf = fitz.open(path)  # PDFファイルを開く
-            # 各ページのテキストを改行で結合
-            text = "\n".join(page.get_text() for page in pdf)
-            # Document オブジェクトにテキストとファイル名メタデータを設定
-            docs.append(Document(page_content=text, metadata={"source": fn}))
-    return docs  # 読み込んだ PDF ドキュメントを返却
+from langchain_community.document_loaders import CSVLoader, PyPDFLoader, TextLoader
+from langchain.schema import Document
 
-def load_texts() -> List[Document]:
-    """
-    DATA_FOLDER 配下の .txt および .csv ファイルをすべて読み込み、
-    ファイル丸ごとのテキストを Document リストで返す
-    """
+from src.config import DATA_FOLDER
+
+# ベースディレクトリ
+DATA_FOLDER_PATH = Path(DATA_FOLDER)
+PUBLIC_FOLDER = DATA_FOLDER_PATH / "public"
+ADMIN_ONLY_FOLDER = DATA_FOLDER_PATH / "admin_only"
+
+# メタデータのデフォルト値
+DEFAULT_TENANT_ID = "default"
+PUBLIC_ROLES = ["admin", "user"]
+ADMIN_ROLES = ["admin"]
+
+
+def load_folder(folder: Path) -> List[Document]:
+    """1つのフォルダ内の .pdf / .txt / .md / .csv を全部読む。"""
     docs: List[Document] = []
-    for fn in os.listdir(DATA_FOLDER):
-        if fn.lower().endswith((".txt", ".csv")):
-            path = os.path.join(DATA_FOLDER, fn)
-            # テキストファイルを UTF-8 で読み込む
-            with open(path, encoding="utf-8") as f:
-                text = f.read()
-            docs.append(Document(page_content=text, metadata={"source": fn}))
-    return docs  # 読み込んだテキスト/CSV ドキュメントを返却
+
+    for path in folder.rglob("*"):
+        if path.is_dir():
+            continue
+
+        suffix = path.suffix.lower()
+        if suffix == ".pdf":
+            loader = PyPDFLoader(str(path))
+        elif suffix in [".txt", ".md"]:
+            loader = TextLoader(str(path), encoding="utf-8")
+        elif suffix == ".csv":
+            loader = CSVLoader(str(path))
+        else:
+            # unsupported (対応していない) 拡張子はスキップ
+            continue
+
+        docs.extend(loader.load())
+
+    return docs
+
+
+def _apply_metadata(docs: List[Document], *, visibility: str, roles_allowed: List[str], default_source: Path) -> None:
+    """metadata を壊さないように付与・補完する。"""
+    for doc in docs:
+        doc.metadata = doc.metadata or {}
+        existing_source = doc.metadata.get("source") or doc.metadata.get("file_path")
+        doc.metadata.setdefault("source", str(existing_source or default_source))
+        doc.metadata["visibility"] = visibility
+        # Chromaはメタデータに配列を許容しないため文字列で保持する
+        doc.metadata["roles_allowed"] = ",".join(roles_allowed)
+        doc.metadata["tenant_id"] = DEFAULT_TENANT_ID
+
 
 def load_all_documents() -> List[Document]:
-    """
-    上記の各ロード関数を順に呼び出し、すべての Document をまとめて返す
-    """
-    return (
-        load_pdfs() + load_texts()
-    )
+    """public / admin_only を読み込み、visibility を設定して返す。"""
+    all_docs: List[Document] = []
+
+    if PUBLIC_FOLDER.exists():
+        public_docs = load_folder(PUBLIC_FOLDER)
+        _apply_metadata(
+            public_docs,
+            visibility="public",
+            roles_allowed=PUBLIC_ROLES,
+            default_source=PUBLIC_FOLDER,
+        )
+        all_docs.extend(public_docs)
+
+    if ADMIN_ONLY_FOLDER.exists():
+        admin_docs = load_folder(ADMIN_ONLY_FOLDER)
+        _apply_metadata(
+            admin_docs,
+            visibility="admin_only",
+            roles_allowed=ADMIN_ROLES,
+            default_source=ADMIN_ONLY_FOLDER,
+        )
+        all_docs.extend(admin_docs)
+
+    return all_docs
+
 
 if __name__ == "__main__":
-    # モジュール単体実行時のテスト用処理
-    docs = load_all_documents()  # すべてのドキュメントを読み込む
-    print(f"Loaded {len(docs)} documents.")  # 読み込んだ件数を表示
+    docs = load_all_documents()
+    print(f"Loaded {len(docs)} documents.")
     for doc in docs:
-        # Document の metadata.source を表示
         print(doc.metadata.get("source"))

@@ -10,21 +10,20 @@ from sqlalchemy.orm import Session
 from src.auth import get_current_user
 from src.database import get_db
 from src.models import RagChatRequest, RagChatResponse, RagSource, User
+from src.rag_chain import get_rag_chain
 from src.utils.history_store import save_history
-from src.rag_chain import get_qa_chain
 
 logger = logging.getLogger("llm_api")
 router = APIRouter(prefix="/rag", tags=["rag"])
 
-rag_qa = None  # LangChain RetrievalQA を起動時にセット
-
 
 def init_rag_chain():
-    """アプリ起動時に一度だけ RAG チェーンを構築する。"""
-    global rag_qa
-    if rag_qa is None:
-        rag_qa = get_qa_chain()
-        logger.info("RAG chain initialized")
+    """Optional eager init for default (public) filter."""
+    try:
+        get_rag_chain("user")
+        logger.info("RAG chain initialized (public)")
+    except Exception as e:
+        logger.warning("RAG chain warmup failed: %s", e)
 
 
 @router.post("/chat", response_model=RagChatResponse)
@@ -36,7 +35,11 @@ def rag_chat(
     """
     LangChain RetrievalQA (RAG) を使った QA エンドポイント。
     """
-    if rag_qa is None:
+    role = getattr(current_user, "role", "user") or "user"
+    try:
+        rag_qa = get_rag_chain(role)
+    except Exception as e:
+        logger.error("Failed to build RAG chain for role %s: %s", role, e)
         raise HTTPException(
             status_code=503,
             detail="RAG chain is not ready.",

@@ -1,20 +1,20 @@
-from typing import List, Optional
-
 import json
 import os
+from functools import lru_cache
+from typing import List, Optional
 
 from janome.tokenizer import Tokenizer
-
-from langchain.chains import RetrievalQA  # RetrievalQAチェーンを使った質問応答機能
-from langchain_openai import ChatOpenAI  # OpenAI互換API用チャットモデル
-from langchain_huggingface import HuggingFaceEmbeddings  # Hugging Face埋め込みモデルラッパー
-from langchain_chroma import Chroma  # vectordbをインポートする際のChromaモジュール
-
+from langchain.chains import RetrievalQA
 from langchain_community.retrievers import BM25Retriever
+from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
 
-from src.config import LLM_MODEL, CHROMA_DB_PATH, VLLM_BASE_URL  # モデル名とChromaDBパス設定を取得
+from src.config import CHROMA_DB_PATH, LLM_MODEL, VLLM_BASE_URL
+
+DEFAULT_TENANT_ID = "default"
 
 
 # ===== ハイブリッド用リトリーバー =====
@@ -28,11 +28,16 @@ class HybridRetriever(BaseRetriever):
         self,
         vector_retriever: BaseRetriever,
         bm25_retriever: BM25Retriever,
+        *,
+        visibility_allowed: Optional[List[str]] = None,
+        tenant_id: str = DEFAULT_TENANT_ID,
         tokenizer: Optional[Tokenizer] = None,
     ) -> None:
         super().__init__()
         self.vector_retriever = vector_retriever
         self.bm25_retriever = bm25_retriever
+        self.visibility_allowed = visibility_allowed or []
+        self.tenant_id = tenant_id
         self.tokenizer = tokenizer or Tokenizer()
 
     # LangChain v0.3系では _get_relevant_documents を実装する
@@ -44,27 +49,48 @@ class HybridRetriever(BaseRetriever):
     ) -> List[Document]:
         # 1) ベクトル検索（意味検索）
         vector_docs = self.vector_retriever.get_relevant_documents(query)
+        vector_docs = self._filter_docs(vector_docs)
 
         # 2) BM25用に質問をトークン化
         tokenized_query = self._tokenize_question(query)
         bm25_docs = self.bm25_retriever.get_relevant_documents(tokenized_query)
+        bm25_docs = self._restore_bm25_text(bm25_docs)
+        bm25_docs = self._filter_docs(bm25_docs)
 
-        # 3) BM25側で「original_text」があれば元に戻す
+        # 3) 2つの結果をマージ (merge: 結合) し、重複を削る
+        merged: dict[str, Document] = {}
+        for doc in vector_docs + bm25_docs:
+            key = doc.page_content
+            if key not in merged:
+                merged[key] = doc
+
+        return list(merged.values())
+
+    def _restore_bm25_text(self, bm25_docs: List[Document]) -> List[Document]:
         restored_docs: List[Document] = []
         for doc in bm25_docs:
             original_text = doc.metadata.get("original_text", doc.page_content)
             restored_docs.append(
                 Document(page_content=original_text, metadata=doc.metadata)
             )
+        return restored_docs
 
-        # 4) 2つの結果をマージ (merge: 結合) し、重複を削る
-        merged: dict[str, Document] = {}
-        for doc in vector_docs + restored_docs:
-            key = doc.page_content
-            if key not in merged:
-                merged[key] = doc
+    def _filter_docs(self, docs: List[Document]) -> List[Document]:
+        """visibility/tenant_id で絞り込む（後方互換のため None も許容）。"""
+        allowed_vis = set(self.visibility_allowed or [])
+        filtered: List[Document] = []
+        for doc in docs:
+            meta = getattr(doc, "metadata", {}) or {}
+            visibility = meta.get("visibility")
+            tenant_id = meta.get("tenant_id")
 
-        return list(merged.values())
+            if allowed_vis and visibility not in allowed_vis:
+                continue
+            if tenant_id not in (None, self.tenant_id):
+                continue
+
+            filtered.append(doc)
+        return filtered
 
     def _tokenize_question(self, text: str) -> str:
         """日本語クエリをBM25用にスペース区切りにする。"""
@@ -72,7 +98,81 @@ class HybridRetriever(BaseRetriever):
         return " ".join(tokens)
 
 
-def _build_bm25_retriever() -> Optional[BM25Retriever]:
+def _visibility_allowed_for_role(role: str) -> List[str]:
+    """role ごとの visibility 許可リスト（移行期は None を許可）。"""
+    # Chroma のバリデーションに合わせて None は含めない
+    if role == "admin":
+        return ["public", "admin_only"]
+    return ["public"]
+
+
+def _visibility_from_filter(filter_kwargs: Optional[dict]) -> Optional[List[str]]:
+    """既存の filter_kwargs から visibility 設定を抽出する。"""
+    if not filter_kwargs:
+        return None
+
+    def _extract(vis_filter):
+        if isinstance(vis_filter, dict):
+            vals = vis_filter.get("$in")
+            if isinstance(vals, list):
+                return vals
+        elif isinstance(vis_filter, list):
+            return vis_filter
+        return None
+
+    if "$and" in filter_kwargs:
+        clauses = filter_kwargs.get("$and") or []
+        for clause in clauses:
+            if not isinstance(clause, dict):
+                continue
+            if "visibility" in clause:
+                extracted = _extract(clause["visibility"])
+                if extracted is not None:
+                    return extracted
+        return None
+
+    if "visibility" in filter_kwargs:
+        return _extract(filter_kwargs["visibility"])
+
+    return None
+
+
+def _tenant_from_filter(filter_kwargs: Optional[dict]) -> Optional[str]:
+    """filter_kwargs から tenant_id を抽出する。"""
+    if not filter_kwargs:
+        return None
+
+    if "$and" in filter_kwargs:
+        clauses = filter_kwargs.get("$and") or []
+        for clause in clauses:
+            if not isinstance(clause, dict):
+                continue
+            if "tenant_id" in clause:
+                tenant = clause["tenant_id"]
+                if isinstance(tenant, dict):
+                    return tenant.get("$eq")
+                return tenant
+        return None
+
+    tenant = filter_kwargs.get("tenant_id")
+    if isinstance(tenant, dict):
+        return tenant.get("$eq")
+    return tenant
+
+
+def _make_where_filter(*, tenant_id: str, visibility_in: List[str]) -> dict:
+    """Chroma validate_where に沿った $and ラップ済みフィルタを作成する。"""
+    cleaned_visibility = [v for v in visibility_in if v is not None]
+    return {
+        "$and": [
+            {"tenant_id": {"$eq": tenant_id}},
+            {"visibility": {"$in": cleaned_visibility}},
+        ]
+    }
+
+
+@lru_cache(maxsize=1)
+def _get_bm25_retriever() -> Optional[BM25Retriever]:
     """
     bm25_documents.json があれば BM25Retriever を作る。
     なければ None を返す（その場合は意味検索だけで動く）。
@@ -96,57 +196,121 @@ def _build_bm25_retriever() -> Optional[BM25Retriever]:
     return bm25_retriever
 
 
-def get_qa_chain() -> RetrievalQA:
-    # 1) 埋め込みモデルを初期化: ドキュメント検索時に使用する
-    emb_model = HuggingFaceEmbeddings(
+@lru_cache(maxsize=1)
+def get_vectorstore() -> Chroma:
+    """Chroma インスタンスを1回だけ作る（キャッシュ）。"""
+    embeddings = HuggingFaceEmbeddings(
         model_name="sonoisa/sentence-bert-base-ja-mean-tokens-v2"
     )
 
-    # 2) 永続化されたChromaDBをロード: 既存のベクトルデータを再利用（意味検索担当）
-    vectordb = Chroma(
-        persist_directory=CHROMA_DB_PATH,  # DBファイルの格納先（ディレクトリ）
-        embedding_function=emb_model       # 埋め込み関数として設定
+    vectorstore = Chroma(
+        embedding_function=embeddings,
+        persist_directory=CHROMA_DB_PATH,
+        collection_name="rag_documents",
     )
 
-    # ベクトル検索用リトリーバー
-    vector_retriever = vectordb.as_retriever(
-        search_kwargs={"k": 3}  # 上位3チャンクを検索（必要に応じて調整）
+    return vectorstore
+
+
+def build_vector_retriever_for_role(role: str) -> BaseRetriever:
+    """role ("admin" / "user") に応じて filter を切り替える retriever を返す。"""
+    vectorstore = get_vectorstore()
+    visibility_allowed = _visibility_allowed_for_role(role)
+    where_filter = _make_where_filter(
+        tenant_id=DEFAULT_TENANT_ID,
+        visibility_in=visibility_allowed,
     )
 
-    # 3) BM25全文検索用リトリーバーを構築
-    bm25_retriever = _build_bm25_retriever()
+    retriever = vectorstore.as_retriever(
+        search_kwargs={
+            "k": 3,
+            "filter": where_filter,
+        }
+    )
+    return retriever
 
-    # 4) リトリーバーの選択
-    if bm25_retriever is not None:
-        # ハイブリッド検索: 意味検索 + 全文検索
-        retriever: BaseRetriever = HybridRetriever(
-            vector_retriever=vector_retriever,
-            bm25_retriever=bm25_retriever,
-        )
-    else:
-        # フォールバック: BM25データがなければ意味検索だけ
-        retriever = vector_retriever
 
-    # 5) vLLM(OpenAI互換)を叩くチャットモデルを初期化
-    llm = ChatOpenAI(
-        base_url=VLLM_BASE_URL,               # 例: http://vllm:8000/v1
-        model=LLM_MODEL,                   # vLLM 側でロード済みのモデル名
-        api_key=os.getenv("OPENAI_API_KEY", "dummy"),  # vLLM 用にダミーでも可
+@lru_cache(maxsize=10)
+def get_llm() -> ChatOpenAI:
+    """LLM クライアントをキャッシュする。"""
+    return ChatOpenAI(
+        base_url=VLLM_BASE_URL,
+        model=LLM_MODEL,
+        api_key=os.getenv("OPENAI_API_KEY", "dummy"),
         temperature=0,
     )
 
-    # 6) RetrievalQAチェーンを構築
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,                   # 使用するLLM
-        chain_type="stuff",        # チェーンの組み立て方式
-        retriever=retriever,       # ここが「ハイブリッドリトリーバー」になる
-        return_source_documents=True  # ソースドキュメントを結果に含める
-    )
 
-    return qa_chain  # 質問応答チェーンを返却
+def _build_retriever(role: str, *, filter_kwargs: Optional[dict] = None) -> BaseRetriever:
+    if filter_kwargs:
+        vectorstore = get_vectorstore()
+        tenant_id = _tenant_from_filter(filter_kwargs) or DEFAULT_TENANT_ID
+        vis_from_filter = _visibility_from_filter(filter_kwargs) or []
+
+        if "$and" in filter_kwargs:
+            where_filter = filter_kwargs
+        elif "tenant_id" in filter_kwargs or "visibility" in filter_kwargs:
+            where_filter = _make_where_filter(
+                tenant_id=tenant_id,
+                visibility_in=vis_from_filter or _visibility_allowed_for_role(role),
+            )
+        else:
+            where_filter = filter_kwargs
+
+        search_kwargs = {"k": 3, "filter": where_filter}
+        vector_retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
+        visibility_allowed = vis_from_filter
+    else:
+        vector_retriever = build_vector_retriever_for_role(role)
+        visibility_allowed = _visibility_allowed_for_role(role)
+        tenant_id = DEFAULT_TENANT_ID
+
+    bm25_retriever = _get_bm25_retriever()
+    if bm25_retriever is not None:
+        return HybridRetriever(
+            vector_retriever=vector_retriever,
+            bm25_retriever=bm25_retriever,
+            visibility_allowed=visibility_allowed,
+            tenant_id=tenant_id,
+        )
+
+    return vector_retriever
+
+
+@lru_cache(maxsize=10)
+def get_rag_chain(role: str) -> RetrievalQA:
+    """
+    roleごとに別のRAGチェーンを作ってキャッシュする。
+    """
+    retriever = _build_retriever(role)
+
+    qa = RetrievalQA.from_chain_type(
+        llm=get_llm(),
+        chain_type="stuff",
+        retriever=retriever,
+        return_source_documents=True,
+    )
+    return qa
+
+
+def get_qa_chain(filter_kwargs: Optional[dict] = None) -> RetrievalQA:
+    """
+    互換用のエントリポイント。filter_kwargs 指定時はそのまま使用し、
+    それ以外はユーザー権限でのチェーンを返す。
+    """
+    if filter_kwargs:
+        retriever = _build_retriever("user", filter_kwargs=filter_kwargs)
+        return RetrievalQA.from_chain_type(
+            llm=get_llm(),
+            chain_type="stuff",
+            retriever=retriever,
+            return_source_documents=True,
+        )
+
+    return get_rag_chain("user")
 
 
 if __name__ == "__main__":
     # スクリプト単体実行時: QAチェーンを初期化して完了メッセージを表示
-    qa = get_qa_chain()
+    qa = get_rag_chain("user")
     print("Hybrid RAG chain is ready.")
