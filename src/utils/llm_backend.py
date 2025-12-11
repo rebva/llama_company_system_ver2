@@ -13,26 +13,72 @@ from src.config import VLLM_BASE_URL, LLM_MODEL
 logger = logging.getLogger("llm_api")
 
 
-def call_llm_backend(
-    messages: List[dict],
-    model_name: Optional[str] = None,
-    max_tokens: int = 1024,
-) -> str:
+def _messages_to_prompt(messages: List[dict]) -> str:
     """
-    Ollama/vLLM の /v1/chat/completions を叩いてレスポンスを取得。
+    Chat形式の履歴を、/v1/completions にそのまま渡せる 1 本の prompt に変換する。
+    - system ロールは先頭にまとめる
+    - user/assistant は [INST] ... [/INST] と回答を順に連結する
     """
-    model = model_name or LLM_MODEL
+    system_chunks: List[str] = []
+    turns: List[Dict[str, Optional[str]]] = []
+
+    for msg in messages:
+        role = msg.get("role")
+        content = (msg.get("content") or "").strip()
+        if not content:
+            continue
+
+        if role == "system":
+            system_chunks.append(content)
+            continue
+
+        if role == "user":
+            turns.append({"user": content, "assistant": None})
+            continue
+
+        if role == "assistant":
+            if turns and turns[-1].get("assistant") is None:
+                turns[-1]["assistant"] = content
+            else:
+                turns.append({"user": None, "assistant": content})
+
+    prompt_lines: List[str] = []
+    if system_chunks:
+        prompt_lines.append("\n\n".join(system_chunks))
+
+    for turn in turns:
+        user_content = turn.get("user")
+        if user_content:
+            prompt_lines.append(f"[INST] {user_content} [/INST]")
+
+        assistant_content = turn.get("assistant")
+        if assistant_content:
+            prompt_lines.append(assistant_content)
+
+    prompt = "\n".join(prompt_lines).strip()
+    return prompt
+
+
+def _post_completion(
+    prompt: str,
+    *,
+    model: str,
+    max_tokens: int,
+    temperature: float,
+    timeout_sec: int = 120,
+) -> Dict[str, Any]:
     payload = {
         "model": model,
-        "messages": messages,
-        "stream": False,
+        "prompt": prompt,
         "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": False,
     }
 
     resp = requests.post(
-        f"{VLLM_BASE_URL}/chat/completions",
+        f"{VLLM_BASE_URL}/completions",
         json=payload,
-        timeout=60,
+        timeout=timeout_sec,
     )
 
     if not resp.ok:
@@ -47,13 +93,39 @@ def call_llm_backend(
         )
 
     data = resp.json()
-    try:
-        return data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError) as e:
+    choices = data.get("choices") or []
+    if not choices or "text" not in choices[0]:
         raise HTTPException(
             status_code=500,
-            detail=f"LLM response format error: {e}",
+            detail="LLM response format error: missing 'text' in choices[0]",
         )
+
+    # 後方互換のため、chat/completions 風の message を付ける
+    text = choices[0].get("text") or ""
+    choices[0]["message"] = {"role": "assistant", "content": text}
+    data["choices"] = choices
+    return data
+
+
+def call_llm_backend(
+    messages: List[dict],
+    model_name: Optional[str] = None,
+    max_tokens: int = 1024,
+) -> str:
+    """
+    Ollama/vLLM の /v1/completions を叩いてレスポンスを取得。
+    """
+    model = model_name or LLM_MODEL
+    prompt = _messages_to_prompt(messages)
+    data = _post_completion(
+        prompt,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=0.0,
+        timeout_sec=60,
+    )
+
+    return data["choices"][0]["text"]
 
 
 # シンプルなチャット呼び出し（tools なし、レスポンス全体を返す）
@@ -64,39 +136,13 @@ def call_llm_simple(
     temperature: float = 0.0,
 ) -> Dict[str, Any]:
     model = model_name or LLM_MODEL
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-
-    resp = requests.post(
-        f"{VLLM_BASE_URL}/chat/completions",
-        json=payload,
-        timeout=120,
+    prompt = _messages_to_prompt(messages)
+    data = _post_completion(
+        prompt,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
     )
-
-    if not resp.ok:
-        logger.error("vLLM error: status=%s body=%s", resp.status_code, resp.text)
-        logger.error(
-            "Payload sent to vLLM (simple): %s",
-            json.dumps(payload, ensure_ascii=False)[:2000],
-        )
-        raise HTTPException(
-            status_code=502,
-            detail=f"LLM backend error {resp.status_code}",
-        )
-
-    data = resp.json()
-    try:
-        _ = data["choices"][0]["message"]
-    except (KeyError, IndexError) as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"LLM response format error: {e}",
-        )
     return data
 
 
@@ -170,37 +216,11 @@ def call_llm_with_sql_tools(
     現状は tools 機能を無効化し、通常の chat/completions として呼び出す。
     """
     model = model_name or LLM_MODEL
-    payload = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "max_tokens": max_tokens,
-    }
-
-    resp = requests.post(
-        f"{VLLM_BASE_URL}/chat/completions",
-        json=payload,
-        timeout=120,
+    prompt = _messages_to_prompt(messages)
+    data = _post_completion(
+        prompt,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=0.0,
     )
-
-    if not resp.ok:
-        logger.error("vLLM error: status=%s body=%s", resp.status_code, resp.text)
-        logger.error(
-            "Payload sent to vLLM (sql tools): %s",
-            json.dumps(payload, ensure_ascii=False)[:2000],
-        )
-        raise HTTPException(
-            status_code=502,
-            detail=f"LLM backend error {resp.status_code}",
-        )
-
-    data = resp.json()
-    try:
-        # shape validation only; router側で中身を扱う
-        _ = data["choices"][0]["message"]
-    except (KeyError, IndexError) as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"LLM response format error: {e}",
-        )
     return data

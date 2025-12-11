@@ -10,7 +10,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAI
 
 from src.config import CHROMA_DB_PATH, LLM_MODEL, VLLM_BASE_URL
 
@@ -231,9 +231,12 @@ def build_vector_retriever_for_role(role: str) -> BaseRetriever:
 
 
 @lru_cache(maxsize=10)
-def get_llm() -> ChatOpenAI:
-    """LLM クライアントをキャッシュする。"""
-    return ChatOpenAI(
+def get_llm() -> OpenAI:
+    """
+    Completion ベースの LLM クライアントをキャッシュする。
+    chat_template を避けるため /v1/completions を使う。
+    """
+    return OpenAI(
         base_url=VLLM_BASE_URL,
         model=LLM_MODEL,
         api_key=os.getenv("OPENAI_API_KEY", "dummy"),

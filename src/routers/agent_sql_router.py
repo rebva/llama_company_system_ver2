@@ -10,8 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.auth import get_current_user
 from src.database import SessionLocal
-from src.utils.llm_backend import LLM_MODEL, VLLM_BASE_URL
-import requests
+from src.utils.llm_backend import call_llm_simple
 
 
 router = APIRouter(prefix="/agent/sql", tags=["agent-sql-chat"])
@@ -37,21 +36,7 @@ def call_llm_p2sql(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
     - temperature(温度) を 0.0 にして、フォーマットを守らせやすくする。
     - 他のエンドポイントには影響しない。
     """
-    payload: Dict[str, Any] = {
-        "model": LLM_MODEL,
-        "messages": messages,
-        "max_tokens": 512,
-        "stream": False,
-        "temperature": 0.0,
-    }
-
-    resp = requests.post(
-        f"{VLLM_BASE_URL}/chat/completions",
-        json=payload,
-        timeout=120,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    return call_llm_simple(messages, max_tokens=512, temperature=0.0)
 
 
 def _build_table_info_str(db: Session) -> str:

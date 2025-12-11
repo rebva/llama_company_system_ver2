@@ -5,8 +5,9 @@ and enforces JSON command formatting with validation before execution.
 """
 from __future__ import annotations
 
-import json
 import logging
+import json
+import re
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -82,20 +83,30 @@ def _extract_single_command(text: str) -> str:
     - reject empty or banned patterns
     """
     cleaned = strip_think_blocks(text)
-    start = cleaned.find("{")
-    end = cleaned.rfind("}")
-    if start == -1 or end == -1 or start >= end:
-        raise ValueError(f"Could not find JSON object in LLM output: {cleaned!r}")
 
-    json_text = cleaned[start : end + 1]
-    try:
-        data = json.loads(json_text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON from LLM: {e}") from e
+    # LLM sometimes returns multiple {"command": "..."} objects concatenated.
+    # Grab the first valid one to stay robust while keeping a single-command policy.
+    cmd = None
+    json_text = None
+    cmd_pattern = re.compile(r'\{[^{}]*["\']command["\']\s*:\s*["\'](.+?)["\'][^{}]*\}')
+    for m in cmd_pattern.finditer(cleaned):
+        json_text = m.group(0)
+        cmd = m.group(1)
+        break
 
-    cmd = data.get("command")
-    if not cmd or not isinstance(cmd, str):
-        raise ValueError(f"Missing or invalid 'command' field: {json_text!r}")
+    if cmd is None:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or start >= end:
+            raise ValueError(f"Could not find JSON object in LLM output: {cleaned!r}")
+        json_text = cleaned[start : end + 1]
+        try:
+            data = json.loads(json_text)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON from LLM: {e}") from e
+        cmd = data.get("command")
+        if not cmd or not isinstance(cmd, str):
+            raise ValueError(f"Missing or invalid 'command' field: {json_text!r}")
 
     cmd = cmd.strip()
 
@@ -141,7 +152,16 @@ async def admin_shell_agent_exec(
     ]
 
     llm_text = llm_backend.call_llm_backend(messages)
-    command = _extract_single_command(llm_text)
+    try:
+        command = _extract_single_command(llm_text)
+    except ValueError as e:
+        # LLM が JSON を返さなかった場合は 502 で返してスタックトレースを防ぐ
+        preview = llm_text[:500] + ("..." if len(llm_text) > 500 else "")
+        logger.warning("admin_shell invalid LLM output: %s", preview)
+        raise HTTPException(
+            status_code=502,
+            detail="LLM output did not contain a valid JSON command. Please retry.",
+        ) from e
 
     if not command:
         logger.error("LLM returned empty command. Raw output: %s", llm_text)

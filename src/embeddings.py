@@ -36,7 +36,8 @@ def build_vectorstore(*, docs: Optional[List[Document]] = None, persist: bool = 
     emb_model = HuggingFaceEmbeddings(
         model_name="sonoisa/sentence-bert-base-ja-mean-tokens-v2",  # 日本語Sentence-BERTモデル
         show_progress=True,                                         # 進捗バーを表示
-        encode_kwargs={"batch_size": 32}                            # バッチサイズ設定
+        model_kwargs={"device": "cpu"},                             # vLLM と GPU を取り合わないよう CPU で実行
+        encode_kwargs={"batch_size": 8},                            # バッチサイズを抑えてメモリ使用量を低減
     )
 
     # 4) ChromaDB にチャンク化したドキュメントを登録

@@ -47,8 +47,9 @@ def chat(
     else:
         history = load_history(db, user_id, session_id)
 
-    if not history:
-        history.append({"role": "system", "content": BASE_SYSTEM_PROMPT})
+    # DB に system が残っていないセッションでも、必ず先頭に付与する
+    if not any(msg.get("role") == "system" for msg in history):
+        history = [{"role": "system", "content": BASE_SYSTEM_PROMPT}] + history
 
     url, tail_text = extract_url_and_rest(req.message)
 
@@ -102,6 +103,19 @@ def chat(
             {"role": "user", "content": req.message}
         ]
 
+    # デバッグ用: LLM に渡す履歴を短くして記録する
+    if logger.isEnabledFor(logging.INFO):
+        preview = []
+        for m in messages:
+            content = m.get("content") or ""
+            preview.append(
+                {
+                    "role": m.get("role"),
+                    "content": content[:200] + ("..." if len(content) > 200 else ""),
+                }
+            )
+        logger.info("LLM input user=%s session=%s messages=%s", user_id, session_id, preview)
+
     answer = call_llm_backend(messages)
 
     if session_id != "garak-chat-session":
@@ -129,6 +143,7 @@ def search_history(
 
     query = db.query(Conversation).filter(
         Conversation.user_id == current_user.username,
+
     )
 
     # キーワード指定時は「キーワードにヒットしたセッションの全メッセージ」を返す
